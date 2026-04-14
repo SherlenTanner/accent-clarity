@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClearVoice Pro — My Personalized Lesson</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --teal: #1a7a7a; --teal-dark: #145f5f; --teal-light: #e8f5f5;
+    --gold: #c9a84c; --ink: #1a1a2e; --text: #2d2d2d; --muted: #6b7280;
+    --border: #e5e7eb; --bg: #f8fafb; --white: #ffffff;
+    --success: #10b981; --warning: #f59e0b; --danger: #ef4444;
+    --sidebar-w: 80px;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+
+  /* SIDEBAR */
+  .sidebar { width: var(--sidebar-w); background: var(--white); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 1rem 0; position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; }
+  .sidebar-logo { width: 44px; height: 44px; background: var(--teal); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; margin-bottom: 1.5rem; }
+  .sidebar-divider { width: 40px; height: 1px; background: var(--border); margin: 0.5rem 0 1rem; }
+  .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0.6rem 0; width: 100%; cursor: pointer; transition: all 0.2s; text-decoration: none; color: var(--muted); position: relative; font-size: 0.82rem; font-weight: 600; }
+  .nav-item.active { color: var(--teal); }
+  .nav-item.active::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 3px; height: 32px; background: var(--teal); border-radius: 0 3px 3px 0; }
+  .nav-item:hover { color: var(--teal); background: var(--teal-light); }
+  .nav-icon { font-size: 1.5rem; line-height: 1; }
+
+  /* MAIN */
+  .main { margin-left: var(--sidebar-w); flex: 1; padding: 2rem 2.5rem; }
+  .breadcrumb { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--muted); margin-bottom: 1.5rem; }
+  .breadcrumb span { color: var(--teal); font-weight: 500; }
+
+  /* HEADER */
+  .page-header { margin-bottom: 2rem; }
+  .student-pill { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--teal); color: white; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.3rem 0.9rem; border-radius: 20px; margin-bottom: 0.6rem; }
+  .page-title { font-size: 1.7rem; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; margin-bottom: 0.3rem; }
+  .page-subtitle { font-size: 0.88rem; color: var(--muted); }
+
+  /* GRID */
+  .lesson-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
+
+  /* PANELS */
+  .panel { background: var(--white); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+  .panel-header { padding: 1.1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .panel-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--teal); }
+  .edit-btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.9rem; background: var(--teal-light); color: var(--teal); border: 1px solid rgba(26,122,122,0.2); border-radius: 8px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .edit-btn:hover { background: var(--teal); color: white; }
+  .profession-tag { display: inline-flex; align-items: center; gap: 0.4rem; background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.3); color: #8a6a1a; font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.7rem; border-radius: 20px; margin: 1rem 1.5rem 0; }
+
+  /* LEFT PANEL BODY */
+  .content-body { padding: 1.4rem 1.5rem; }
+  .step-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem; }
+  .step-num { width: 20px; height: 20px; background: var(--teal); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; flex-shrink: 0; }
+
+  /* THE SENTENCES — clean, large, easy to read while recording */
+  .lesson-sentences {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--teal);
+    border-radius: 0 12px 12px 0;
+    background: var(--bg);
+    padding: 1.4rem 1.5rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .sentence-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sentence-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .sentence-row:first-child { padding-top: 0; }
+
+  .sentence-num {
+    width: 24px; height: 24px;
+    background: var(--teal);
+    color: white;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.68rem; font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .sentence-text {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.15rem;
+    line-height: 1.8;
+    color: var(--ink);
+    flex: 1;
+  }
+
+  /* Highlight types */
+  .hl-teal { background: var(--teal-light); color: var(--teal-dark); padding: 1px 4px; border-radius: 3px; font-weight: 700; }
+  .hl-gold { background: rgba(201,168,76,0.15); color: #7a5a10; padding: 1px 4px; border-radius: 3px; font-weight: 700; border-bottom: 2px solid var(--gold); }
+  .hl-red { background: rgba(239,68,68,0.08); color: #b91c1c; padding: 1px 4px; border-radius: 3px; font-weight: 700; border-bottom: 2px solid #ef4444; }
+
+  /* Legend */
+  .highlight-legend {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.4rem;
+    padding: 0.7rem 1rem;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* Focus sounds */
+  .focus-sounds { padding: 1rem 0; border-top: 1px solid var(--border); margin-top: 0.4rem; margin-bottom: 1.4rem; }
+  .focus-title { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.7rem; }
+  .sounds-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .sound-chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.78rem; font-weight: 500; color: var(--text); background: var(--bg); cursor: pointer; transition: all 0.2s; }
+  .sound-chip:hover { border-color: var(--teal); background: var(--teal-light); color: var(--teal); }
+  .sound-chip-label { font-size: 0.68rem; color: var(--muted); }
+
+  /* Teacher note */
+  .teacher-note {
+    background: rgba(201,168,76,0.07);
+    border: 1px solid rgba(201,168,76,0.25);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    margin-bottom: 1.4rem;
+    font-size: 0.82rem;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .teacher-note-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); margin-bottom: 0.3rem; }
+
+  /* DIVIDER between shadow and record */
+  .section-divider {
+    border: none;
+    border-top: 2px dashed var(--border);
+    margin: 1.4rem 0;
+  }
+
+  /* RECORD AREA */
+  .record-tip { background: linear-gradient(135deg, var(--teal-light), rgba(201,168,76,0.04)); border: 1px solid rgba(26,122,122,0.15); border-radius: 10px; padding: 0.9rem 1rem; margin-bottom: 1rem; font-size: 0.82rem; color: var(--text); line-height: 1.6; }
+  .record-tip strong { color: var(--teal); }
+
+  /* Waveform */
+  .waveform { display: flex; align-items: center; justify-content: center; gap: 3px; height: 44px; margin: 0.8rem 0; }
+  .wave-bar { width: 4px; background: var(--teal); border-radius: 2px; animation: waveAnim 1s ease-in-out infinite alternate; }
+  @keyframes waveAnim { from { transform: scaleY(0.3); opacity: 0.4; } to { transform: scaleY(1); opacity: 1; } }
+
+  .btn-record { width: 100%; padding: 0.95rem; background: var(--teal); color: white; border: none; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
+  .btn-record:hover { background: var(--teal-dark); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(26,122,122,0.25); }
+
+  .btn-stop { width: 100%; padding: 0.95rem; background: var(--danger); color: white; border: none; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: none; align-items: center; justify-content: center; gap: 0.6rem; }
+  .btn-stop:hover { background: #dc2626; }
+
+  /* AI FEEDBACK — sits right below the sentences */
+  .feedback-panel {
+    display: none;
+    margin-top: 1.2rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .feedback-header {
+    padding: 0.9rem 1.1rem;
+    background: linear-gradient(135deg, var(--teal-light), rgba(201,168,76,0.06));
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .feedback-score-big { font-size: 1.4rem; font-weight: 700; color: var(--success); }
+  .feedback-body { padding: 1.1rem; }
+
+  .bar-wrap { margin-bottom: 0.8rem; }
+  .bar-label { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.3rem; }
+  .bar-track { height: 6px; background: var(--border); border-radius: 10px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 10px; }
+
+  /* Sentence-level feedback */
+  .sentence-feedback {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .sf-item {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.8rem 1rem;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  .sf-item.good { border-left: 3px solid var(--success); }
+  .sf-item.needs-work { border-left: 3px solid var(--warning); }
+  .sf-item.error { border-left: 3px solid var(--danger); }
+
+  .sf-num { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.2rem; }
+  .sf-num.good { color: var(--success); }
+  .sf-num.needs-work { color: var(--warning); }
+  .sf-num.error { color: var(--danger); }
+
+  .btn-again { width: 100%; margin-top: 1rem; padding: 0.75rem; background: white; color: var(--teal); border: 1px solid var(--teal); border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn-again:hover { background: var(--teal-light); }
+
+  /* AVATAR PANEL */
+  .avatar-panel { position: sticky; top: 2rem; }
+  .avatar-video { background: linear-gradient(135deg, #0e1a2e, #1a3a4a, #0e2a2a); aspect-ratio: 9/11; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .avatar-figure { display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; }
+  .avatar-head { width: 80px; height: 80px; background: linear-gradient(135deg, #d4a574, #c49060); border-radius: 50%; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+  .avatar-mouth { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); width: 28px; height: 10px; background: #8a3a2a; border-radius: 0 0 14px 14px; animation: mouthTalk 0.4s ease-in-out infinite alternate; }
+  @keyframes mouthTalk { from { height: 4px; } to { height: 14px; } }
+  .avatar-eyes { position: absolute; top: 28px; left: 50%; transform: translateX(-50%); display: flex; gap: 16px; }
+  .avatar-eye { width: 8px; height: 8px; background: #2d1a0e; border-radius: 50%; }
+  .avatar-body { width: 120px; height: 140px; background: linear-gradient(180deg, #2a4a7a, #1a3a6a); border-radius: 60px 60px 20px 20px; margin-top: -10px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+  .avatar-waves { position: absolute; bottom: 0; left: 0; right: 0; height: 60px; display: flex; align-items: flex-end; justify-content: center; gap: 3px; padding-bottom: 12px; opacity: 0.4; }
+  .av-wave { width: 3px; background: #2a9a9a; border-radius: 2px; animation: avWave 0.8s ease-in-out infinite alternate; }
+  .av-wave:nth-child(1) { height: 8px; } .av-wave:nth-child(2) { height: 15px; animation-delay:.1s; } .av-wave:nth-child(3) { height: 22px; animation-delay:.2s; } .av-wave:nth-child(4) { height: 30px; animation-delay:.3s; } .av-wave:nth-child(5) { height: 22px; animation-delay:.4s; } .av-wave:nth-child(6) { height: 15px; animation-delay:.3s; } .av-wave:nth-child(7) { height: 25px; animation-delay:.2s; } .av-wave:nth-child(8) { height: 18px; animation-delay:.1s; }
+  @keyframes avWave { from { transform: scaleY(0.3); } to { transform: scaleY(1); } }
+  .now-speaking { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(26,122,122,0.85); color: white; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.25rem 0.9rem; border-radius: 20px; white-space: nowrap; display: flex; align-items: center; gap: 0.4rem; }
+  .speaking-dot { width: 6px; height: 6px; background: #4ade80; border-radius: 50%; animation: blink 1s ease-in-out infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+  .avatar-text-overlay { position: absolute; bottom: 70px; left: 1rem; right: 1rem; background: rgba(14,26,46,0.88); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 0.9rem 1rem; font-size: 0.82rem; color: white; line-height: 1.6; text-align: center; }
+  .avatar-text-overlay .highlight { color: var(--gold); font-weight: 600; }
+  .avatar-controls { padding: 1rem 1.2rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.8rem; }
+  .ctrl-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: var(--white); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+  .ctrl-btn.primary { background: var(--teal); border-color: var(--teal); color: white; width: 40px; height: 40px; }
+  .ctrl-btn:hover { border-color: var(--teal); background: var(--teal-light); }
+  .ctrl-btn.primary:hover { background: var(--teal-dark); }
+  .ctrl-timeline { flex: 1; height: 4px; background: var(--border); border-radius: 10px; }
+  .ctrl-fill { width: 30%; height: 100%; background: var(--teal); border-radius: 10px; }
+  .ctrl-time { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+  .speed-badge { background: var(--teal-light); color: var(--teal); font-size: 0.68rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 6px; cursor: pointer; }
+  .shadow-box { padding: 1rem 1.2rem; background: linear-gradient(135deg, var(--teal-light), rgba(201,168,76,0.05)); }
+  .shadow-title { font-size: 0.75rem; font-weight: 700; color: var(--teal); margin-bottom: 0.3rem; }
+  .shadow-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+
+  .watermark { position: fixed; bottom: 0.5rem; right: 1rem; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.2em; color: var(--border); text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">🎙️</div>
+  <div class="sidebar-divider"></div>
+  <a href="#" class="nav-item"><span class="nav-icon">👋</span><span>Welcome</span></a>
+  <a href="#" class="nav-item active"><span class="nav-icon">📚</span><span>Lessons</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">📊</span><span>Reports</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">🔗</span><span>Fluency</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">📝</span><span>Notes</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">👤</span><span>Account</span></a>
+  <a href="#" class="nav-item" style="margin-top:auto;color:#ef4444;"><span class="nav-icon">⚙️</span><span>Admin</span></a>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+  <div class="breadcrumb">
+    <span style="color:var(--teal); font-size:1.1rem; font-weight:700;">LangSolution</span> <span style="color:var(--ink); font-size:1.1rem; font-weight:700;">Accent Clarity</span> <span style="opacity:0.3">›</span> <span style="color:var(--teal); font-weight:500;">Legal Track</span> <span style="opacity:0.3">›</span> <span>My Personalized Lesson</span>
+  </div>
+
+  <div class="page-header">
+    <div class="student-pill">⚖️ Carlos Rivera — Immigration Lawyer</div>
+    <h1 class="page-title">Your Courtroom Communication</h1>
+    <p class="page-subtitle">Based on your last live session with Sherlen — April 9, 2026</p>
+  </div>
+
+  <!-- PROGRESS TRACKER -->
+  <div style="background:var(--white); border:1px solid var(--border); border-radius:16px; padding:1.4rem 2rem; margin-bottom:1.5rem;">
+    
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.2rem; flex-wrap:wrap; gap:1rem;">
+      <div>
+        <div style="font-size:0.68rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:0.3rem;">Your Journey</div>
+        <div style="font-size:1.1rem; font-weight:700; color:var(--ink);">Lesson 7 of 20 <span style="font-size:0.85rem; font-weight:400; color:var(--muted); margin-left:0.3rem;">— Immigration Law · Courtroom Communication</span></div>
+      </div>
+      <div style="display:flex; gap:1.5rem;">
+        <div style="text-align:center;">
+          <div style="font-size:1.6rem; font-weight:700; color:var(--teal); line-height:1;">7</div>
+          <div style="font-size:0.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em;">Completed</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:1.6rem; font-weight:700; color:var(--gold); line-height:1;">13</div>
+          <div style="font-size:0.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em;">Remaining</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:1.6rem; font-weight:700; color:var(--success); line-height:1;">79%</div>
+          <div style="font-size:0.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em;">Avg Score</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Big progress bar -->
+    <div style="margin-bottom:1.2rem;">
+      <div style="height:10px; background:var(--border); border-radius:10px; overflow:hidden; position:relative;">
+        <div style="width:35%; height:100%; background:linear-gradient(90deg, var(--teal), var(--teal-mid)); border-radius:10px; transition:width 1s ease;"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:0.68rem; color:var(--muted); margin-top:0.3rem;">
+        <span>Start</span>
+        <span style="color:var(--teal); font-weight:600;">35% complete</span>
+        <span>Finish</span>
+      </div>
+    </div>
+
+    <!-- Lesson dots -->
+    <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+      <!-- Done -->
+      <div title="Lesson 1 — /θ/ Introduction&#10;Score: 72%" style="width:32px; height:32px; border-radius:50%; background:var(--success); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">1</div>
+      <div title="Lesson 2 — /r/ Sound&#10;Score: 75%" style="width:32px; height:32px; border-radius:50%; background:var(--success); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">2</div>
+      <div title="Lesson 3 — Weak Forms&#10;Score: 78%" style="width:32px; height:32px; border-radius:50%; background:var(--success); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">3</div>
+      <div title="Lesson 4 — Sentence Stress&#10;Score: 81%" style="width:32px; height:32px; border-radius:50%; background:var(--success); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">4</div>
+      <div title="Lesson 5 — Linking Sounds&#10;Score: 80%" style="width:32px; height:32px; border-radius:50%; background:var(--success); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">5</div>
+      <div title="Lesson 6 — Jaw Opening&#10;Score: 83%" style="width:32px; height:32px; border-radius:50%; background:var(--success); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">6</div>
+
+      <!-- Current -->
+      <div title="Lesson 7 — Courtroom Language&#10;In Progress" style="width:36px; height:36px; border-radius:50%; background:var(--teal); border:3px solid var(--gold); display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; color:white; cursor:pointer; box-shadow:0 0 0 4px rgba(201,168,76,0.2); transition:all 0.2s;">7</div>
+
+      <!-- Locked -->
+      <div title="Lesson 8 — Locked" style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted); cursor:not-allowed;">8</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">9</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">10</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">11</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">12</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">13</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">14</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">15</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">16</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">17</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">18</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">19</div>
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:var(--muted);">20</div>
+
+      <!-- Legend -->
+      <div style="margin-left:0.8rem; display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:0.3rem; font-size:0.68rem; color:var(--muted);">
+          <div style="width:10px; height:10px; border-radius:50%; background:var(--success);"></div> Done
+        </div>
+        <div style="display:flex; align-items:center; gap:0.3rem; font-size:0.68rem; color:var(--muted);">
+          <div style="width:10px; height:10px; border-radius:50%; background:var(--teal); border:2px solid var(--gold);"></div> Current
+        </div>
+        <div style="display:flex; align-items:center; gap:0.3rem; font-size:0.68rem; color:var(--muted);">
+          <div style="width:10px; height:10px; border-radius:50%; background:var(--border);"></div> Locked
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="lesson-grid">
+
+    <!-- ── LEFT ── -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-label">✍️ Your Personalized Sentences</div>
+        <div class="edit-btn">✏️ Edit</div>
+      </div>
+
+      <div class="profession-tag">⚖️ Immigration Law · Courtroom Communication</div>
+
+      <div class="content-body">
+
+        <!-- Teacher note -->
+        <div class="teacher-note">
+          <div class="teacher-note-label">📝 Note from Sherlen</div>
+          Carlos — in our last session I noticed your /θ/ drops to /d/ when you speak quickly. These sentences are loaded with your exact sounds. Slow down on every highlighted word.
+        </div>
+
+        <!-- STEP 1 -->
+        <div class="step-label">
+          <div class="step-num">1</div>
+          Shadow the avatar — then read these sentences aloud
+        </div>
+
+        <!-- Highlight legend -->
+        <div class="highlight-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--teal-light); border:1px solid var(--teal);"></div> Focus sound</div>
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(201,168,76,0.2); border-bottom:2px solid var(--gold);"></div> Watch this word</div>
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(239,68,68,0.1); border-bottom:2px solid #ef4444;"></div> Common error here</div>
+        </div>
+
+        <!-- THE 4 SENTENCES — large, clear, always visible -->
+        <div class="lesson-sentences">
+
+          <div class="sentence-row">
+            <div class="sentence-num">1</div>
+            <div class="sentence-text">
+              There's a moment every immigration lawyer knows — whether <span class="hl-red">the</span> judge can actually hear you.
+            </div>
+          </div>
+
+          <div class="sentence-row">
+            <div class="sentence-num">2</div>
+            <div class="sentence-text">
+              <span class="hl-red">This</span> is where a conversation about accents becomes important.
+            </div>
+          </div>
+
+          <div class="sentence-row">
+            <div class="sentence-num">3</div>
+            <div class="sentence-text">
+              <span class="hl-gold">The</span> argument rests on <span class="hl-red">the</span> fundamental rights of <span class="hl-red">the</span> respondent.
+            </div>
+          </div>
+
+          <div class="sentence-row">
+            <div class="sentence-num">4</div>
+            <div class="sentence-text">
+              One is identity. <span class="hl-teal">The</span> other is a skill — and skills can be learned.
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Focus sounds -->
+        <div class="focus-sounds">
+          <div class="focus-title">🎯 Your Focus Sounds</div>
+          <div class="sounds-row">
+            <div class="sound-chip">/θ/ <span class="sound-chip-label">the, this, there's</span></div>
+            <div class="sound-chip">/r/ <span class="sound-chip-label">rights, argument</span></div>
+            <div class="sound-chip">/ð/ <span class="sound-chip-label">whether, other</span></div>
+          </div>
+        </div>
+
+        <hr class="section-divider">
+
+        <!-- STEP 2 — RECORD -->
+        <div class="step-label" style="margin-bottom:0.8rem;">
+          <div class="step-num">2</div>
+          Record yourself — the sentences stay on screen while you read
+        </div>
+
+        <div class="record-tip">
+          💡 Read <strong>all 4 sentences</strong> clearly. The sentences above stay visible the whole time — look up whenever you need to. Take your time.
+        </div>
+
+        <!-- Waveform -->
+        <div class="waveform">
+          <div class="wave-bar" style="height:10px;animation-delay:0.0s;"></div>
+          <div class="wave-bar" style="height:18px;animation-delay:0.1s;"></div>
+          <div class="wave-bar" style="height:28px;animation-delay:0.2s;"></div>
+          <div class="wave-bar" style="height:36px;animation-delay:0.3s;"></div>
+          <div class="wave-bar" style="height:28px;animation-delay:0.4s;"></div>
+          <div class="wave-bar" style="height:20px;animation-delay:0.3s;"></div>
+          <div class="wave-bar" style="height:32px;animation-delay:0.2s;"></div>
+          <div class="wave-bar" style="height:22px;animation-delay:0.1s;"></div>
+          <div class="wave-bar" style="height:14px;animation-delay:0.0s;"></div>
+          <div class="wave-bar" style="height:26px;animation-delay:0.15s;"></div>
+          <div class="wave-bar" style="height:34px;animation-delay:0.25s;"></div>
+          <div class="wave-bar" style="height:18px;animation-delay:0.35s;"></div>
+        </div>
+
+        <button class="btn-record" id="btn-start" onclick="startRecording()">🎤 Start Recording</button>
+        <button class="btn-stop" id="btn-stop" onclick="stopRecording()">⏹ Stop &amp; Get AI Feedback</button>
+
+        <!-- ── AI FEEDBACK — right below the sentences ── -->
+        <div class="feedback-panel" id="feedback-panel">
+
+          <div class="feedback-header">
+            <div class="panel-label">🤖 AI Feedback — Carlos Rivera</div>
+            <div class="feedback-score-big">74%</div>
+          </div>
+
+          <div class="feedback-body">
+
+            <!-- Overall scores -->
+            <div class="bar-wrap">
+              <div class="bar-label"><span>/θ/ sound — "the, this, there's"</span><span style="color:var(--warning);font-weight:600;">68%</span></div>
+              <div class="bar-track"><div class="bar-fill" style="width:68%;background:var(--warning);"></div></div>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar-label"><span>/ð/ — "whether, other"</span><span style="color:var(--success);font-weight:600;">84%</span></div>
+              <div class="bar-track"><div class="bar-fill" style="width:84%;background:var(--success);"></div></div>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar-label"><span>/r/ — "rights, argument"</span><span style="color:var(--warning);font-weight:600;">71%</span></div>
+              <div class="bar-track"><div class="bar-fill" style="width:71%;background:var(--warning);"></div></div>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar-label"><span>Rhythm &amp; flow</span><span style="color:var(--success);font-weight:600;">86%</span></div>
+              <div class="bar-track"><div class="bar-fill" style="width:86%;background:var(--success);"></div></div>
+            </div>
+
+            <!-- Sentence by sentence feedback -->
+            <div class="sentence-feedback">
+
+              <div class="sf-item error">
+                <div class="sf-num error">Sentence 1 — Needs attention</div>
+                "...whether <strong style="color:var(--danger);">de</strong> judge..." → You said /d/ instead of /θ/. Tongue between the teeth for "the." Try again.
+              </div>
+
+              <div class="sf-item needs-work">
+                <div class="sf-num needs-work">Sentence 2 — Getting closer</div>
+                "<strong style="color:var(--warning);">Dis</strong> is where..." → Almost right — tongue position is correct but not enough airflow. Push a little more air through.
+              </div>
+
+              <div class="sf-item good">
+                <div class="sf-num good">Sentence 3 — Well done ✓</div>
+                "The argument rests..." → Your /θ/ on "the" was correct all three times. This is real progress from last session.
+              </div>
+
+              <div class="sf-item good">
+                <div class="sf-num good">Sentence 4 — Well done ✓</div>
+                Natural rhythm, clear sounds. "The other" was excellent — both /θ/ and /ð/ correct.
+              </div>
+
+            </div>
+
+            <button class="btn-again" onclick="resetRecording()">🔄 Record Again</button>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── RIGHT — AVATAR ── -->
+    <div class="panel avatar-panel">
+      <div class="panel-header">
+        <div class="panel-label">🎬 Shadow the Avatar</div>
+        <div class="speed-badge">Speed: 0.75×</div>
+      </div>
+
+      <div class="avatar-video">
+        <div class="now-speaking"><div class="speaking-dot"></div> Now Speaking</div>
+        <div class="avatar-figure">
+          <div class="avatar-head">
+            <div class="avatar-eyes"><div class="avatar-eye"></div><div class="avatar-eye"></div></div>
+            <div class="avatar-mouth"></div>
+          </div>
+          <div class="avatar-body"></div>
+        </div>
+        <div class="avatar-waves">
+          <div class="av-wave"></div><div class="av-wave"></div><div class="av-wave"></div>
+          <div class="av-wave"></div><div class="av-wave"></div><div class="av-wave"></div>
+          <div class="av-wave"></div><div class="av-wave"></div>
+        </div>
+        <div class="avatar-text-overlay">
+          "...whether <span class="highlight">the</span> judge can actually hear you..."
+        </div>
+      </div>
+
+      <div class="avatar-controls">
+        <button class="ctrl-btn">⏮</button>
+        <button class="ctrl-btn primary">▶</button>
+        <button class="ctrl-btn">⏭</button>
+        <div class="ctrl-timeline"><div class="ctrl-fill"></div></div>
+        <div class="ctrl-time">0:12 / 0:58</div>
+        <button class="ctrl-btn">🔊</button>
+      </div>
+
+      <div class="shadow-box">
+        <div class="shadow-title">🪞 How to Shadow</div>
+        <div class="shadow-desc">Listen to the avatar read your sentences. Repeat immediately after — matching the rhythm and sounds exactly. Do this 2–3 times before you record.</div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<div class="watermark">LANGSOLUTION ACCENT CLARITY</div>
+
+<script>
+function startRecording() {
+  document.getElementById('btn-start').style.display = 'none';
+  document.getElementById('btn-stop').style.display = 'flex';
+  document.getElementById('feedback-panel').style.display = 'none';
+}
+function stopRecording() {
+  document.getElementById('btn-stop').style.display = 'none';
+  document.getElementById('feedback-panel').style.display = 'block';
+  document.getElementById('feedback-panel').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function resetRecording() {
+  document.getElementById('feedback-panel').style.display = 'none';
+  document.getElementById('btn-start').style.display = 'flex';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+</script>
+
+</body>
+</html>

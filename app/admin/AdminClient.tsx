@@ -1,0 +1,511 @@
+'use client'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import Sidebar from '@/components/Sidebar'
+import { createClient } from '@/lib/supabase'
+import type { Student, Lesson, Score } from '@/lib/supabase'
+
+interface Props {
+  students:      Student[]
+   allLessons:    Lesson[]
+  
+  allScores:     Score[]
+  studentScores: Record<string, number>
+  stats: {
+    activeStudents:   number
+    totalLessonsBuilt: number
+    avgScore:         number
+    onPause:          number
+  }
+  adminName: string
+}
+
+const ALL_SOUNDS = ['/θ/', '/ð/', '/r/', '/v/', '/w/', '/h/', '/æ/', '/ə/', 'Linking', 'Stress', 'Weak Forms']
+
+type EditorTab = 'lesson' | 'sounds' | 'features' | 'progress'
+
+export default function AdminClient({ students, allLessons, allScores, studentScores, stats, adminName }: Props) {
+  const [activeStudentId, setActiveStudentId] = useState<string | null>(
+    students.length > 0 ? students[0].id : null
+  )
+  const [editorTab, setEditorTab] = useState<EditorTab>('lesson')
+  const [saving, setSaving]       = useState(false)
+  const [savedMsg, setSavedMsg]   = useState('')
+  const router = useRouter()
+  const supabase = createClient()
+
+  const activeStudent = students.find(s => s.id === activeStudentId) ?? null
+
+  // Lessons for active student
+  const studentLessons = allLessons.filter(l => l.student_id === activeStudentId)
+  const studentScoreList = allScores.filter(s => s.student_id === activeStudentId)
+
+  // Find current (active) lesson
+  const currentLesson = studentLessons.find(l => l.status === 'active')
+  const [selectedLessonNum, setSelectedLessonNum] = useState<number>(currentLesson?.lesson_number ?? 7)
+
+  const selectedLesson = studentLessons.find(l => l.lesson_number === selectedLessonNum)
+
+  // Form state
+  const [lessonTitle, setLessonTitle]     = useState(selectedLesson?.title ?? '')
+  const [lessonDate, setLessonDate]       = useState(selectedLesson?.lesson_date ?? '')
+  const [sentences, setSentences]         = useState(selectedLesson?.sentences ?? '')
+  const [teacherNote, setTeacherNote]     = useState(selectedLesson?.teacher_note ?? '')
+  const [totalLessons, setTotalLessons]   = useState(activeStudent?.total_lessons ?? 20)
+  const [focusSounds, setFocusSounds]     = useState<string[]>(selectedLesson?.focus_sounds ?? ['/θ/', '/ð/', '/r/'])
+  const [features, setFeatures]           = useState(activeStudent?.features ?? {
+    personalized_lessons: true,
+    record_feedback: true,
+    sound_library: true,
+    fluency_skills: false,
+    avatar_shadowing: true,
+    progress_tracker: true,
+  })
+
+  // When switching students, reset state
+  const handleSelectStudent = (student: Student) => {
+    setActiveStudentId(student.id)
+    setEditorTab('lesson')
+    setSavedMsg('')
+    const lessons = allLessons.filter(l => l.student_id === student.id)
+    const active  = lessons.find(l => l.status === 'active')
+    const num     = active?.lesson_number ?? student.current_lesson
+    setSelectedLessonNum(num)
+    const lesson = lessons.find(l => l.lesson_number === num)
+    setLessonTitle(lesson?.title ?? '')
+    setLessonDate(lesson?.lesson_date ?? '')
+    setSentences(lesson?.sentences ?? '')
+    setTeacherNote(lesson?.teacher_note ?? '')
+    setFocusSounds(lesson?.focus_sounds ?? [])
+    setTotalLessons(student.total_lessons)
+    setFeatures(student.features)
+  }
+
+  // When selecting a lesson dot
+  const handleSelectLesson = (num: number) => {
+    setSelectedLessonNum(num)
+    const lesson = studentLessons.find(l => l.lesson_number === num)
+    setLessonTitle(lesson?.title ?? '')
+    setLessonDate(lesson?.lesson_date ?? '')
+    setSentences(lesson?.sentences ?? '')
+    setTeacherNote(lesson?.teacher_note ?? '')
+    setFocusSounds(lesson?.focus_sounds ?? [])
+    setSavedMsg('')
+  }
+
+  const toggleSound = (sound: string) => {
+    setFocusSounds(prev =>
+      prev.includes(sound) ? prev.filter(s => s !== sound) : [...prev, sound]
+    )
+  }
+
+  const toggleFeature = (key: keyof typeof features) => {
+    setFeatures(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const showSaved = (msg: string) => {
+    setSavedMsg(msg)
+    setTimeout(() => setSavedMsg(''), 3000)
+  }
+
+  const handleSaveLesson = async () => {
+    if (!activeStudent || !selectedLesson) return
+    setSaving(true)
+    await supabase
+      .from('lessons')
+      .update({ title: lessonTitle, lesson_date: lessonDate, sentences, teacher_note: teacherNote, focus_sounds: focusSounds })
+      .eq('id', selectedLesson.id)
+    setSaving(false)
+    showSaved('Lesson saved ✓')
+    router.refresh()
+  }
+
+  const handleSaveSounds = async () => {
+    if (!selectedLesson) return
+    setSaving(true)
+    await supabase
+      .from('lessons')
+      .update({ focus_sounds: focusSounds })
+      .eq('id', selectedLesson.id)
+    setSaving(false)
+    showSaved('Focus sounds saved ✓')
+    router.refresh()
+  }
+
+  const handleSaveFeatures = async () => {
+    if (!activeStudent) return
+    setSaving(true)
+    await supabase
+      .from('students')
+      .update({ features, total_lessons: totalLessons })
+      .eq('id', activeStudent.id)
+    setSaving(false)
+    showSaved('Settings saved ✓')
+    router.refresh()
+  }
+
+  const handleTogglePause = async () => {
+    if (!activeStudent) return
+    const newStatus = activeStudent.status === 'active' ? 'paused' : 'active'
+    await supabase.from('students').update({ status: newStatus }).eq('id', activeStudent.id)
+    showSaved(`Student ${newStatus === 'paused' ? 'paused' : 'reactivated'} ✓`)
+    router.refresh()
+  }
+
+  const lessonDotState = (num: number): string => {
+    const l = studentLessons.find(x => x.lesson_number === num)
+    if (!l) return 'empty'
+    if (l.status === 'done') return 'done'
+    if (l.status === 'active') return 'active'
+    return 'empty'
+  }
+
+  const FEATURES = [
+    { key: 'personalized_lessons' as const, icon: '📚', name: 'Personalized Lessons', desc: 'Custom sentence sets per session' },
+    { key: 'record_feedback'      as const, icon: '🎙️', name: 'Record & Feedback',    desc: 'AI-powered pronunciation scoring' },
+    { key: 'sound_library'        as const, icon: '🔤', name: 'Sound Library',         desc: 'Full phoneme reference library' },
+    { key: 'fluency_skills'       as const, icon: '🔗', name: 'Fluency Skills',        desc: 'Linking, rhythm and connected speech' },
+    { key: 'avatar_shadowing'     as const, icon: '🎬', name: 'Avatar Shadowing',      desc: 'Animated avatar to shadow' },
+    { key: 'progress_tracker'     as const, icon: '📊', name: 'Progress Tracker',      desc: 'Score history and lesson progress' },
+  ]
+
+  return (
+    <div className="layout">
+      <Sidebar isAdmin />
+      <main className="main">
+
+        <div className="brand-bar">
+          <span className="brand-title">LangSolution Accent Clarity</span>
+          <span className="admin-badge">Admin Panel</span>
+        </div>
+
+        <div className="breadcrumb">
+          <span>LangSolution</span>
+          <span className="breadcrumb-sep">›</span>
+          <span>Accent Clarity</span>
+          <span className="breadcrumb-sep">›</span>
+          <span className="breadcrumb-current">Admin</span>
+        </div>
+
+        {/* Page header */}
+        <div className="admin-page-header">
+          <div>
+            <div className="admin-page-title">Student Management</div>
+            <div className="admin-page-sub">Manage lessons, sentences, scores and settings for each student</div>
+          </div>
+          <button className="btn-add" onClick={() => alert('Add New Student — coming soon!')}>
+            + Add New Student
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="admin-stats-row">
+          <div className="stat-card">
+            <div className="stat-card-num">{stats.activeStudents}</div>
+            <div className="stat-card-label">Active Students</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-num">{stats.totalLessonsBuilt}</div>
+            <div className="stat-card-label">Total Lessons Built</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-num success">{stats.avgScore}%</div>
+            <div className="stat-card-label">Avg Score</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-num gold">{stats.onPause}</div>
+            <div className="stat-card-label">On Pause</div>
+          </div>
+        </div>
+
+        {/* Student grid */}
+        <div className="student-grid">
+          {students.map(student => {
+            const progress = Math.round(((student.current_lesson - 1) / student.total_lessons) * 100)
+            const avg      = studentScores[student.id] ?? 0
+            return (
+              <div
+                key={student.id}
+                className={`student-card ${activeStudentId === student.id ? 'active' : ''}`}
+                onClick={() => handleSelectStudent(student)}
+              >
+                <div className="student-card-top">
+                  <div className="student-avatar" style={{ background: student.avatar_color }}>
+                    {student.avatar_initials}
+                  </div>
+                  <div>
+                    <div className="student-name">{student.name}</div>
+                    <div className="student-role">⚖️ {student.profession} · {student.location}</div>
+                    <div className={`student-status ${student.status}`}>
+                      <div className={`status-dot ${student.status}`} />
+                      {student.status === 'active' ? 'Active' : 'On Pause'}
+                    </div>
+                  </div>
+                </div>
+                <div className="student-card-bottom">
+                  <div className="progress-mini">
+                    <div className="progress-mini-label">Lesson {student.current_lesson} of {student.total_lessons}</div>
+                    <div className="progress-mini-bar">
+                      <div className="progress-mini-fill" style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
+                  <span className="score-chip">{avg > 0 ? `${avg}%` : '—'}</span>
+                  <button className="btn-edit" onClick={e => { e.stopPropagation(); handleSelectStudent(student) }}>
+                    Edit
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Editor panel */}
+        {activeStudent && (
+          <div className="editor-panel">
+
+            {/* Editor header */}
+            <div className="editor-header">
+              <div className="editor-header-title">✏️ Editing — {activeStudent.name}</div>
+              <div className="editor-header-sub">
+                {activeStudent.profession} · {activeStudent.location} · Lesson {activeStudent.current_lesson} of {activeStudent.total_lessons}
+              </div>
+              <div className="editor-header-actions">
+                <button className="btn-pause" onClick={handleTogglePause}>
+                  {activeStudent.status === 'active' ? '⏸ Pause Student' : '▶ Reactivate'}
+                </button>
+                <Link href="/dashboard" className="btn-view">View as Student →</Link>
+              </div>
+            </div>
+
+            {/* Saved message */}
+            {savedMsg && (
+              <div style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--success)', fontSize: '0.82rem', fontWeight: 600, padding: '0.5rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+                {savedMsg}
+              </div>
+            )}
+
+            {/* Tabs */}
+            <div className="editor-tabs">
+              {(['lesson', 'sounds', 'features', 'progress'] as EditorTab[]).map(tab => (
+                <button
+                  key={tab}
+                  className={`editor-tab ${editorTab === tab ? 'active' : ''}`}
+                  onClick={() => setEditorTab(tab)}
+                >
+                  {tab === 'lesson'   ? '📝 Lesson Content' :
+                   tab === 'sounds'   ? '🎯 Focus Sounds'   :
+                   tab === 'features' ? '⚙️ Features'       :
+                                        '📊 Progress'}
+                </button>
+              ))}
+            </div>
+
+            <div className="editor-body">
+
+              {/* TAB: Lesson Content */}
+              {editorTab === 'lesson' && (
+                <div>
+                  {/* Lesson selector dots */}
+                  <div className="lesson-selector">
+                    {Array.from({ length: activeStudent.total_lessons }, (_, i) => i + 1).map(n => {
+                      const state = n === selectedLessonNum ? 'selected' : lessonDotState(n)
+                      return (
+                        <button
+                          key={n}
+                          className={`ls-dot ${state}`}
+                          onClick={() => handleSelectLesson(n)}
+                          title={`Lesson ${n}`}
+                        >
+                          {lessonDotState(n) === 'done' ? '✓' : n}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-section">
+                      <label className="form-label">Lesson Title</label>
+                      <input
+                        className="form-input"
+                        value={lessonTitle}
+                        onChange={e => setLessonTitle(e.target.value)}
+                        placeholder="e.g. Courtroom Communication"
+                      />
+                    </div>
+                    <div className="form-section">
+                      <label className="form-label">Date</label>
+                      <input
+                        className="form-input"
+                        value={lessonDate}
+                        onChange={e => setLessonDate(e.target.value)}
+                        placeholder="e.g. April 9, 2026"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Highlight guide */}
+                  <div className="highlight-guide">
+                    <span>Markup guide:</span>
+                    <div className="hl-guide-item">
+                      <div className="hl-guide-dot" style={{ background: 'rgba(26,122,122,0.4)', border: '1.5px solid var(--teal)' }} />
+                      <span>[teal]word[/teal] — Focus sound</span>
+                    </div>
+                    <div className="hl-guide-item">
+                      <div className="hl-guide-dot" style={{ background: 'rgba(201,168,76,0.4)', border: '1.5px solid var(--gold)' }} />
+                      <span>[gold]word[/gold] — Key phrase</span>
+                    </div>
+                    <div className="hl-guide-item">
+                      <div className="hl-guide-dot" style={{ background: 'rgba(239,68,68,0.3)', border: '1.5px solid var(--danger)' }} />
+                      <span>[red]word[/red] — Common error</span>
+                    </div>
+                  </div>
+
+                  <div className="form-section">
+                    <label className="form-label">Sentences (one per line, use markup above)</label>
+                    <textarea
+                      className="form-textarea"
+                      value={sentences}
+                      onChange={e => setSentences(e.target.value)}
+                      placeholder={`[teal]There's[/teal] a moment every [gold]immigration lawyer[/gold] knows...\nYou need to say [teal]the[/teal] word "[teal]threshold[/teal]" clearly.\n...`}
+                      rows={8}
+                    />
+                  </div>
+
+                  <div className="form-section">
+                    <label className="form-label">Teacher Note (private — shown to student before recording)</label>
+                    <textarea
+                      className="form-textarea"
+                      value={teacherNote}
+                      onChange={e => setTeacherNote(e.target.value)}
+                      placeholder="Personal note to the student about this lesson..."
+                      rows={3}
+                      style={{ minHeight: 80 }}
+                    />
+                  </div>
+
+                  <div className="form-section">
+                    <label className="form-label">Total Lessons in Journey</label>
+                    <div className="count-picker">
+                      <button className="count-btn" onClick={() => setTotalLessons(l => Math.max(5, l - 5))}>−5</button>
+                      <button className="count-btn" onClick={() => setTotalLessons(l => Math.max(5, l - 1))}>−1</button>
+                      <span className="count-num">{totalLessons}</span>
+                      <button className="count-btn" onClick={() => setTotalLessons(l => Math.min(50, l + 1))}>+1</button>
+                      <button className="count-btn" onClick={() => setTotalLessons(l => Math.min(50, l + 5))}>+5</button>
+                    </div>
+                  </div>
+
+                  <button className="btn-save" onClick={handleSaveLesson} disabled={saving}>
+                    {saving ? 'Saving…' : `💾 Save Lesson ${selectedLessonNum}`}
+                  </button>
+                </div>
+              )}
+
+              {/* TAB: Focus Sounds */}
+              {editorTab === 'sounds' && (
+                <div>
+                  <div className="form-section">
+                    <label className="form-label">Select Focus Sounds for {activeStudent.name}</label>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: '0.85rem', lineHeight: 1.5 }}>
+                      These appear as chips on the lesson page and guide the AI feedback.
+                    </p>
+                    <div className="sounds-picker">
+                      {ALL_SOUNDS.map(sound => (
+                        <button
+                          key={sound}
+                          className={`sound-pick ${focusSounds.includes(sound) ? 'selected' : ''}`}
+                          onClick={() => toggleSound(sound)}
+                        >
+                          {sound}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="btn-save" onClick={handleSaveSounds} disabled={saving}>
+                    {saving ? 'Saving…' : '💾 Save Focus Sounds'}
+                  </button>
+                </div>
+              )}
+
+              {/* TAB: Features */}
+              {editorTab === 'features' && (
+                <div>
+                  <div className="form-section">
+                    <label className="form-label">Features Visible to {activeStudent.name}</label>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: '0.85rem', lineHeight: 1.5 }}>
+                      Turn features on or off for this student's view.
+                    </p>
+                    <div className="features-grid">
+                      {FEATURES.map(feat => (
+                        <div className="feature-toggle" key={feat.key}>
+                          <div className="feature-info">
+                            <div className="feature-name">{feat.icon} {feat.name}</div>
+                            <div className="feature-desc">{feat.desc}</div>
+                          </div>
+                          <div
+                            className={`toggle ${features[feat.key] ? 'on' : ''}`}
+                            onClick={() => toggleFeature(feat.key)}
+                            role="switch"
+                            aria-checked={features[feat.key]}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="btn-save" onClick={handleSaveFeatures} disabled={saving}>
+                    {saving ? 'Saving…' : '💾 Save Features'}
+                  </button>
+                </div>
+              )}
+
+              {/* TAB: Progress */}
+              {editorTab === 'progress' && (
+                <div>
+                  <div className="form-section">
+                    <label className="form-label">{activeStudent.name}&rsquo;s Score History</label>
+                    {studentScoreList.length === 0 ? (
+                      <div style={{ color: 'var(--muted)', fontSize: '0.85rem', padding: '1rem 0' }}>
+                        No scores recorded yet. Scores appear here after students complete and submit lessons.
+                      </div>
+                    ) : (
+                      <div className="score-history">
+                        {studentScoreList.map(score => (
+                          <div
+                            key={score.id}
+                            className={`score-history-item ${score.lesson_number === activeStudent.current_lesson ? 'current-lesson' : ''}`}
+                          >
+                            <div className="score-hist-num">{score.lesson_number}</div>
+                            <div className="score-hist-info">
+                              <div className="score-hist-title">{score.lesson_title ?? `Lesson ${score.lesson_number}`}</div>
+                              <div className="score-hist-date">{new Date(score.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                            </div>
+                            <div className="score-hist-score">{score.overall_score}%</div>
+                          </div>
+                        ))}
+
+                        {/* Current lesson — in progress */}
+                        {!studentScoreList.find(s => s.lesson_number === activeStudent.current_lesson) && (
+                          <div className="score-history-item current-lesson">
+                            <div className="score-hist-num">{activeStudent.current_lesson}</div>
+                            <div className="score-hist-info">
+                              <div className="score-hist-title">{studentLessons.find(l => l.lesson_number === activeStudent.current_lesson)?.title ?? `Lesson ${activeStudent.current_lesson}`}</div>
+                              <div className="score-hist-date">In progress</div>
+                            </div>
+                            <div className="score-hist-score in-progress">In Progress</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        )}
+
+      </main>
+      <div className="watermark">LangSolution · Admin</div>
+    </div>
+  )
+}

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LangSolution Accent Clarity — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --teal: #1a7a7a; --teal-dark: #145f5f; --teal-light: #e8f5f5;
+    --gold: #c9a84c; --ink: #1a1a2e; --text: #2d2d2d; --muted: #6b7280;
+    --border: #e5e7eb; --bg: #f8fafb; --white: #ffffff;
+    --success: #10b981; --warning: #f59e0b; --danger: #ef4444;
+    --sidebar-w: 80px;
+  }
+  body { font-family: "DM Sans", sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+
+  /* SIDEBAR */
+  .sidebar { width: var(--sidebar-w); background: var(--white); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 1.2rem 0; position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; }
+  .sidebar-logo { width: 46px; height: 46px; background: var(--teal); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; margin-bottom: 2rem; }
+  .sidebar-divider { width: 36px; height: 1px; background: var(--border); margin: 0.5rem 0 1rem; }
+  .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0.85rem 0; width: 100%; cursor: pointer; transition: all 0.2s; text-decoration: none; color: var(--muted); position: relative; font-size: 0.82rem; font-weight: 600; }
+  .nav-item.active { color: var(--danger); }
+  .nav-item.active::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 3px; height: 32px; background: var(--danger); border-radius: 0 3px 3px 0; }
+  .nav-item:hover { color: var(--teal); background: var(--teal-light); }
+  .nav-icon { font-size: 1.5rem; line-height: 1; }
+
+  /* MAIN */
+  .main { margin-left: var(--sidebar-w); flex: 1; padding: 1.5rem 2rem; }
+
+  /* BRAND */
+  .brand-bar { text-align: center; padding-bottom: 1rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: center; gap: 1rem; }
+  .admin-badge { background: var(--danger); color: white; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.25rem 0.8rem; border-radius: 20px; }
+
+  /* PAGE HEADER */
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .page-title { font-size: 1.4rem; font-weight: 700; color: var(--ink); }
+  .page-subtitle { font-size: 0.85rem; color: var(--muted); margin-top: 0.2rem; }
+  .btn-add { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: var(--teal); color: white; border: none; border-radius: 10px; font-family: "DM Sans", sans-serif; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn-add:hover { background: var(--teal-dark); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(26,122,122,0.3); }
+
+  /* STATS ROW */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  .stat-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 1.2rem; }
+  .stat-num { font-size: 2rem; font-weight: 700; color: var(--teal); line-height: 1; margin-bottom: 0.3rem; }
+  .stat-label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+  /* STUDENT LIST */
+  .student-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .student-card { background: var(--white); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: all 0.2s; cursor: pointer; }
+  .student-card:hover { border-color: var(--teal); box-shadow: 0 4px 16px rgba(26,122,122,0.1); transform: translateY(-2px); }
+  .student-card.active { border-color: var(--teal); border-width: 2px; }
+  .student-card-top { padding: 1.2rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.9rem; }
+  .student-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--teal); color: white; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700; flex-shrink: 0; }
+  .student-name { font-size: 0.95rem; font-weight: 700; color: var(--ink); margin-bottom: 0.15rem; }
+  .student-role { font-size: 0.78rem; color: var(--muted); }
+  .student-status { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+  .status-dot.paused { background: var(--warning); }
+  .status-label { font-size: 0.65rem; font-weight: 600; color: var(--muted); }
+  .student-card-bottom { padding: 1rem 1.2rem; display: flex; justify-content: space-between; align-items: center; }
+  .progress-mini { flex: 1; margin-right: 1rem; }
+  .progress-mini-label { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--muted); margin-bottom: 0.3rem; }
+  .progress-mini-bar { height: 5px; background: var(--border); border-radius: 10px; overflow: hidden; }
+  .progress-mini-fill { height: 100%; background: var(--teal); border-radius: 10px; }
+  .score-chip { background: var(--teal-light); color: var(--teal); font-size: 0.8rem; font-weight: 700; padding: 0.3rem 0.7rem; border-radius: 8px; white-space: nowrap; }
+  .btn-edit { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-family: "DM Sans", sans-serif; font-size: 0.75rem; font-weight: 600; padding: 0.4rem 0.9rem; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-left: 0.5rem; }
+  .btn-edit:hover { border-color: var(--teal); color: var(--teal); background: var(--teal-light); }
+
+  /* STUDENT EDITOR */
+  .editor-panel { background: var(--white); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+  .editor-header { padding: 1.3rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, var(--teal-light), rgba(201,168,76,0.05)); }
+  .editor-title { font-size: 1rem; font-weight: 700; color: var(--ink); }
+  .editor-subtitle { font-size: 0.8rem; color: var(--muted); margin-top: 0.15rem; }
+  .editor-tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .editor-tab { padding: 0.85rem 1.5rem; font-size: 0.82rem; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+  .editor-tab.active { color: var(--teal); border-bottom-color: var(--teal); }
+  .editor-body { padding: 1.5rem; }
+
+  /* LESSON EDITOR */
+  .lesson-selector { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .lesson-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; cursor: pointer; transition: all 0.2s; border: 2px solid var(--border); background: var(--bg); color: var(--muted); }
+  .lesson-dot:hover { border-color: var(--teal); color: var(--teal); }
+  .lesson-dot.done { background: var(--success); border-color: var(--success); color: white; }
+  .lesson-dot.active { background: var(--teal); border-color: var(--gold); color: white; box-shadow: 0 0 0 3px rgba(201,168,76,0.2); width: 36px; height: 36px; }
+  .lesson-dot.empty { background: var(--white); border-color: var(--border); color: var(--border); }
+
+  /* FORM */
+  .form-section { margin-bottom: 1.5rem; }
+  .form-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; display: block; }
+  .form-input { width: 100%; padding: 0.75rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; font-family: "DM Sans", sans-serif; font-size: 0.88rem; color: var(--text); outline: none; transition: border 0.2s; }
+  .form-input:focus { border-color: var(--teal); background: white; }
+  .form-textarea { width: 100%; padding: 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; font-family: "DM Sans", sans-serif; font-size: 0.95rem; color: var(--text); outline: none; transition: border 0.2s; resize: vertical; min-height: 160px; line-height: 1.8; }
+  .form-textarea:focus { border-color: var(--teal); background: white; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+
+  /* HIGHLIGHT LEGEND */
+  .highlight-guide { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; padding: 0.8rem 1rem; background: var(--bg); border-radius: 10px; border: 1px solid var(--border); }
+  .hl-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--muted); }
+  .hl-dot { width: 14px; height: 14px; border-radius: 3px; }
+  .hl-teal { background: var(--teal-light); border: 1px solid var(--teal); }
+  .hl-gold { background: rgba(201,168,76,0.2); border-bottom: 2px solid var(--gold); }
+  .hl-red { background: rgba(239,68,68,0.1); border-bottom: 2px solid var(--danger); }
+
+  /* FOCUS SOUNDS */
+  .sounds-picker { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .sound-pick { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.9rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.8rem; font-weight: 500; color: var(--text); background: var(--white); cursor: pointer; transition: all 0.2s; font-family: "DM Mono", monospace; }
+  .sound-pick:hover { border-color: var(--teal); color: var(--teal); background: var(--teal-light); }
+  .sound-pick.selected { background: var(--teal); border-color: var(--teal); color: white; }
+
+  /* FEATURES TOGGLE */
+  .features-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+  .feature-toggle { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+  .feature-name { font-size: 0.85rem; font-weight: 500; color: var(--ink); }
+  .feature-desc { font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; }
+  .toggle { width: 44px; height: 24px; background: var(--border); border-radius: 12px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+  .toggle.on { background: var(--teal); }
+  .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; background: white; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .toggle.on::after { transform: translateX(20px); }
+
+  /* LESSON COUNT */
+  .count-picker { display: flex; align-items: center; gap: 1rem; }
+  .count-btn { width: 36px; height: 36px; border: 1px solid var(--border); background: var(--white); border-radius: 8px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .count-btn:hover { border-color: var(--teal); color: var(--teal); }
+  .count-num { font-size: 1.5rem; font-weight: 700; color: var(--ink); min-width: 40px; text-align: center; }
+
+  /* SAVE BUTTON */
+  .btn-save { width: 100%; padding: 1rem; background: var(--teal); color: white; border: none; border-radius: 10px; font-family: "DM Sans", sans-serif; font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 1.5rem; }
+  .btn-save:hover { background: var(--teal-dark); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(26,122,122,0.3); }
+
+  /* TAB PANELS */
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .watermark { position: fixed; bottom: 0.5rem; right: 1rem; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.2em; color: var(--border); text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">🎙️</div>
+  <div class="sidebar-divider"></div>
+  <a href="#" class="nav-item"><span class="nav-icon">👋</span><span>Welcome</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">📚</span><span>Lessons</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">🔤</span><span>Sounds</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">🔗</span><span>Fluency</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">📊</span><span>Progress</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">🗂️</span><span>Resources</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">📝</span><span>Notes</span></a>
+  <a href="#" class="nav-item"><span class="nav-icon">👤</span><span>Account</span></a>
+  <a href="#" class="nav-item active"><span class="nav-icon">⚙️</span><span>Admin</span></a>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- BRAND -->
+  <div class="brand-bar">
+    <span style="color:var(--teal); font-size:1.4rem; font-weight:700;">LangSolution</span>
+    <span style="color:var(--ink); font-size:1.4rem; font-weight:700;"> Accent Clarity</span>
+    <div class="admin-badge">Admin Panel</div>
+  </div>
+
+  <!-- PAGE HEADER -->
+  <div class="page-header">
+    <div>
+      <div class="page-title">Student Management</div>
+      <div class="page-subtitle">Manage lessons, sentences, scores and settings for each student</div>
+    </div>
+    <button class="btn-add" onclick="showNewStudent()">+ Add New Student</button>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-num">2</div>
+      <div class="stat-label">Active Students</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">27</div>
+      <div class="stat-label">Total Lessons Built</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--success);">79%</div>
+      <div class="stat-label">Avg Score</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--gold);">1</div>
+      <div class="stat-label">On Pause</div>
+    </div>
+  </div>
+
+  <!-- STUDENT CARDS -->
+  <div class="student-grid">
+
+    <!-- Marcos -->
+    <div class="student-card active" onclick="openStudent('marcos')">
+      <div class="student-card-top">
+        <div class="student-avatar">MG</div>
+        <div>
+          <div class="student-name">Marcos Gutierrez</div>
+          <div class="student-role">⚖️ Immigration Lawyer · Puerto Rico</div>
+        </div>
+        <div class="student-status">
+          <div class="status-dot paused"></div>
+          <div class="status-label">On Pause</div>
+        </div>
+      </div>
+      <div class="student-card-bottom">
+        <div class="progress-mini">
+          <div class="progress-mini-label"><span>Lesson 7 of 20</span><span>35%</span></div>
+          <div class="progress-mini-bar"><div class="progress-mini-fill" style="width:35%;"></div></div>
+        </div>
+        <div class="score-chip">79%</div>
+        <button class="btn-edit">Edit</button>
+      </div>
+    </div>
+
+    <!-- Carlos -->
+    <div class="student-card" onclick="openStudent('carlos')">
+      <div class="student-card-top">
+        <div class="student-avatar" style="background:#2a6a9a;">CR</div>
+        <div>
+          <div class="student-name">Carlos Rivera</div>
+          <div class="student-role">⚖️ Immigration Lawyer · Mexico</div>
+        </div>
+        <div class="student-status">
+          <div class="status-dot"></div>
+          <div class="status-label">Active</div>
+        </div>
+      </div>
+      <div class="student-card-bottom">
+        <div class="progress-mini">
+          <div class="progress-mini-label"><span>Lesson 4 of 20</span><span>20%</span></div>
+          <div class="progress-mini-bar"><div class="progress-mini-fill" style="width:20%;"></div></div>
+        </div>
+        <div class="score-chip">74%</div>
+        <button class="btn-edit">Edit</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- STUDENT EDITOR -->
+  <div class="editor-panel" id="editor-marcos">
+
+    <div class="editor-header">
+      <div>
+        <div class="editor-title">✏️ Editing — Marcos Gutierrez</div>
+        <div class="editor-subtitle">Immigration Lawyer · Puerto Rico · Lesson 7 of 20</div>
+      </div>
+      <div style="display:flex; gap:0.5rem;">
+        <button style="padding:0.5rem 1rem; background:rgba(239,68,68,0.1); color:var(--danger); border:1px solid rgba(239,68,68,0.2); border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer;">⏸ Pause Student</button>
+        <button style="padding:0.5rem 1rem; background:var(--white); border:1px solid var(--border); border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer;">View as Student →</button>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="editor-tabs">
+      <div class="editor-tab active" onclick="switchEditorTab('lesson', this)">📝 Lesson Content</div>
+      <div class="editor-tab" onclick="switchEditorTab('sounds', this)">🎯 Focus Sounds</div>
+      <div class="editor-tab" onclick="switchEditorTab('features', this)">⚙️ Features</div>
+      <div class="editor-tab" onclick="switchEditorTab('progress', this)">📊 Progress</div>
+    </div>
+
+    <div class="editor-body">
+
+      <!-- LESSON CONTENT TAB -->
+      <div class="tab-panel active" id="tab-lesson">
+
+        <!-- Lesson selector -->
+        <div class="form-section">
+          <label class="form-label">Select Lesson to Edit</label>
+          <div class="lesson-selector">
+            <div class="lesson-dot done">1</div>
+            <div class="lesson-dot done">2</div>
+            <div class="lesson-dot done">3</div>
+            <div class="lesson-dot done">4</div>
+            <div class="lesson-dot done">5</div>
+            <div class="lesson-dot done">6</div>
+            <div class="lesson-dot active">7</div>
+            <div class="lesson-dot empty">8</div>
+            <div class="lesson-dot empty">9</div>
+            <div class="lesson-dot empty">10</div>
+            <div class="lesson-dot empty">11</div>
+            <div class="lesson-dot empty">12</div>
+            <div class="lesson-dot empty">13</div>
+            <div class="lesson-dot empty">14</div>
+            <div class="lesson-dot empty">15</div>
+            <div class="lesson-dot empty">16</div>
+            <div class="lesson-dot empty">17</div>
+            <div class="lesson-dot empty">18</div>
+            <div class="lesson-dot empty">19</div>
+            <div class="lesson-dot empty">20</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label class="form-label">Lesson Title</label>
+            <input class="form-input" type="text" value="Courtroom Communication" placeholder="e.g. Courtroom Communication"/>
+          </div>
+          <div>
+            <label class="form-label">Date</label>
+            <input class="form-input" type="text" value="April 9, 2026" placeholder="Session date"/>
+          </div>
+        </div>
+
+        <!-- Highlight guide -->
+        <label class="form-label">Write Your 4–5 Sentences</label>
+        <div class="highlight-guide">
+          <div class="hl-item"><div class="hl-dot hl-teal"></div> Wrap in [teal]word[/teal] — focus sound</div>
+          <div class="hl-item"><div class="hl-dot hl-gold"></div> Wrap in [gold]word[/gold] — watch this</div>
+          <div class="hl-item"><div class="hl-dot hl-red"></div> Wrap in [red]word[/red] — common error</div>
+        </div>
+
+        <div class="form-section">
+          <textarea class="form-textarea">There's a moment every immigration lawyer knows — whether [red]the[/red] judge can actually hear you.
+
+[red]This[/red] is where a conversation about accents becomes important.
+
+[gold]The[/gold] argument rests on [red]the[/red] fundamental rights of [red]the[/red] respondent.
+
+One is identity. [teal]The[/teal] other is a skill — and skills can be learned.</textarea>
+        </div>
+
+        <!-- Lesson count -->
+        <div class="form-section">
+          <label class="form-label">Total Lessons for This Student</label>
+          <div class="count-picker">
+            <button class="count-btn" onclick="changeCount(-5)">−5</button>
+            <button class="count-btn" onclick="changeCount(-1)">−</button>
+            <div class="count-num" id="lesson-count">20</div>
+            <button class="count-btn" onclick="changeCount(1)">+</button>
+            <button class="count-btn" onclick="changeCount(5)">+5</button>
+          </div>
+        </div>
+
+        <button class="btn-save">💾 Save Lesson 7</button>
+
+      </div>
+
+      <!-- FOCUS SOUNDS TAB -->
+      <div class="tab-panel" id="tab-sounds">
+        <div class="form-section">
+          <label class="form-label">Select Focus Sounds for Marcos</label>
+          <div style="font-size:0.8rem; color:var(--muted); margin-bottom:1rem;">These appear as chips on his lesson page and guide the AI feedback.</div>
+          <div class="sounds-picker">
+            <div class="sound-pick selected" onclick="toggleSound(this)">/θ/ — the, this, three</div>
+            <div class="sound-pick selected" onclick="toggleSound(this)">/ð/ — whether, other</div>
+            <div class="sound-pick selected" onclick="toggleSound(this)">/r/ — rights, argue</div>
+            <div class="sound-pick" onclick="toggleSound(this)">/v/ — verdict, valve</div>
+            <div class="sound-pick" onclick="toggleSound(this)">/w/ — witness, award</div>
+            <div class="sound-pick" onclick="toggleSound(this)">/h/ — hearing, honor</div>
+            <div class="sound-pick" onclick="toggleSound(this)">/æ/ — that, actually</div>
+            <div class="sound-pick" onclick="toggleSound(this)">/ə/ — schwa</div>
+            <div class="sound-pick" onclick="toggleSound(this)">Linking Sounds</div>
+            <div class="sound-pick" onclick="toggleSound(this)">Sentence Stress</div>
+            <div class="sound-pick" onclick="toggleSound(this)">Weak Forms</div>
+          </div>
+        </div>
+        <button class="btn-save">💾 Save Focus Sounds</button>
+      </div>
+
+      <!-- FEATURES TAB -->
+      <div class="tab-panel" id="tab-features">
+        <div class="form-section">
+          <label class="form-label">Features Visible to Marcos</label>
+          <div style="font-size:0.8rem; color:var(--muted); margin-bottom:1rem;">Turn features on or off. He won't see anything that's turned off.</div>
+          <div class="features-grid">
+            <div class="feature-toggle">
+              <div><div class="feature-name">📚 Personalized Lessons</div><div class="feature-desc">His custom sentences from you</div></div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div class="feature-toggle">
+              <div><div class="feature-name">🎙️ Record & Feedback</div><div class="feature-desc">AI pronunciation feedback</div></div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div class="feature-toggle">
+              <div><div class="feature-name">🔤 Sound Library</div><div class="feature-desc">Individual sound diagrams</div></div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div class="feature-toggle">
+              <div><div class="feature-name">🔗 Fluency Skills</div><div class="feature-desc">Linking, weak forms, schwa</div></div>
+              <div class="toggle" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div class="feature-toggle">
+              <div><div class="feature-name">🎬 Avatar Shadowing</div><div class="feature-desc">Shadow the avatar video</div></div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div class="feature-toggle">
+              <div><div class="feature-name">📊 Progress Tracker</div><div class="feature-desc">20-lesson journey view</div></div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-save">💾 Save Feature Settings</button>
+      </div>
+
+      <!-- PROGRESS TAB -->
+      <div class="tab-panel" id="tab-progress">
+        <div class="form-section">
+          <label class="form-label">Marcos's Score History</label>
+          <div style="display:flex; flex-direction:column; gap:0.6rem;">
+
+            <div style="display:flex; align-items:center; gap:1rem; padding:0.8rem 1rem; background:var(--bg); border:1px solid var(--border); border-radius:10px;">
+              <div style="width:30px; height:30px; background:var(--success); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; flex-shrink:0;">1</div>
+              <div style="flex:1;"><div style="font-size:0.82rem; font-weight:600; color:var(--ink);">/θ/ Introduction</div><div style="font-size:0.72rem; color:var(--muted);">March 15, 2026</div></div>
+              <div style="font-size:1rem; font-weight:700; color:var(--success);">72%</div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:1rem; padding:0.8rem 1rem; background:var(--bg); border:1px solid var(--border); border-radius:10px;">
+              <div style="width:30px; height:30px; background:var(--success); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; flex-shrink:0;">2</div>
+              <div style="flex:1;"><div style="font-size:0.82rem; font-weight:600; color:var(--ink);">/r/ Sound</div><div style="font-size:0.72rem; color:var(--muted);">March 22, 2026</div></div>
+              <div style="font-size:1rem; font-weight:700; color:var(--success);">75%</div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:1rem; padding:0.8rem 1rem; background:var(--bg); border:1px solid var(--border); border-radius:10px;">
+              <div style="width:30px; height:30px; background:var(--success); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; flex-shrink:0;">3</div>
+              <div style="flex:1;"><div style="font-size:0.82rem; font-weight:600; color:var(--ink);">Weak Forms</div><div style="font-size:0.72rem; color:var(--muted);">March 29, 2026</div></div>
+              <div style="font-size:1rem; font-weight:700; color:var(--success);">78%</div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:1rem; padding:0.8rem 1rem; background:var(--bg); border:1px solid var(--border); border-radius:10px;">
+              <div style="width:30px; height:30px; background:var(--success); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; flex-shrink:0;">4</div>
+              <div style="flex:1;"><div style="font-size:0.82rem; font-weight:600; color:var(--ink);">Sentence Stress</div><div style="font-size:0.72rem; color:var(--muted);">April 5, 2026</div></div>
+              <div style="font-size:1rem; font-weight:700; color:var(--success);">81%</div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:1rem; padding:0.8rem 1rem; background:var(--teal-light); border:1px solid rgba(26,122,122,0.2); border-radius:10px;">
+              <div style="width:30px; height:30px; background:var(--teal); border:2px solid var(--gold); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:white; flex-shrink:0;">7</div>
+              <div style="flex:1;"><div style="font-size:0.82rem; font-weight:600; color:var(--teal);">Courtroom Communication — Current</div><div style="font-size:0.72rem; color:var(--teal-dark);">April 9, 2026</div></div>
+              <div style="font-size:0.78rem; font-weight:600; color:var(--teal);">In Progress</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<div class="watermark">LANGSOLUTION ACCENT CLARITY — ADMIN</div>
+
+<script>
+function switchEditorTab(tab, el) {
+  document.querySelectorAll('.editor-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+function toggleSound(el) {
+  el.classList.toggle('selected');
+}
+
+var lessonCount = 20;
+function changeCount(delta) {
+  lessonCount = Math.max(5, Math.min(50, lessonCount + delta));
+  document.getElementById('lesson-count').textContent = lessonCount;
+}
+
+function openStudent(id) {
+  document.querySelectorAll('.student-card').forEach(c => c.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+
+function showNewStudent() {
+  alert('Add New Student form coming soon!');
+}
+</script>
+
+</body>
+</html>

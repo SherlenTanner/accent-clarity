@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"/Users/Sherlen/Desktop/Accent Clarity\"/*.html)",
+      "Bash(npm install:*)",
+      "Read(//usr/local/bin/**)",
+      "Bash(command -v node)",
+      "Bash(npx next:*)",
+      "Bash(node -e ':*)"
+    ]
+  }
+}
