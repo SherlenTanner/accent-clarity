@@ -8,8 +8,7 @@ import type { Student, Lesson, Score } from '@/lib/supabase'
 
 interface Props {
   students:      Student[]
-   allLessons:    Lesson[]
-  
+  allLessons:    Lesson[]
   allScores:     Score[]
   studentScores: Record<string, number>
   stats: {
@@ -32,29 +31,37 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
   const [editorTab, setEditorTab] = useState<EditorTab>('lesson')
   const [saving, setSaving]       = useState(false)
   const [savedMsg, setSavedMsg]   = useState('')
+
+  // Add New Student modal state
+  const [showAddModal, setShowAddModal]   = useState(false)
+  const [newName, setNewName]             = useState('')
+  const [newEmail, setNewEmail]           = useState('')
+  const [newProfession, setNewProfession] = useState('')
+  const [newLocation, setNewLocation]     = useState('')
+  const [addingStudent, setAddingStudent] = useState(false)
+  const [addError, setAddError]           = useState('')
+  const [addSuccess, setAddSuccess]       = useState('')
+
   const router = useRouter()
   const supabase = createClient()
 
   const activeStudent = students.find(s => s.id === activeStudentId) ?? null
 
-  // Lessons for active student
-  const studentLessons = allLessons.filter(l => l.student_id === activeStudentId)
+  const studentLessons   = allLessons.filter(l => l.student_id === activeStudentId)
   const studentScoreList = allScores.filter(s => s.student_id === activeStudentId)
 
-  // Find current (active) lesson
   const currentLesson = studentLessons.find(l => l.status === 'active')
   const [selectedLessonNum, setSelectedLessonNum] = useState<number>(currentLesson?.lesson_number ?? 7)
 
   const selectedLesson = studentLessons.find(l => l.lesson_number === selectedLessonNum)
 
-  // Form state
-  const [lessonTitle, setLessonTitle]     = useState(selectedLesson?.title ?? '')
-  const [lessonDate, setLessonDate]       = useState(selectedLesson?.lesson_date ?? '')
-  const [sentences, setSentences]         = useState(selectedLesson?.sentences ?? '')
-  const [teacherNote, setTeacherNote]     = useState(selectedLesson?.teacher_note ?? '')
-  const [totalLessons, setTotalLessons]   = useState(activeStudent?.total_lessons ?? 20)
-  const [focusSounds, setFocusSounds]     = useState<string[]>(selectedLesson?.focus_sounds ?? ['/θ/', '/ð/', '/r/'])
-  const [features, setFeatures]           = useState(activeStudent?.features ?? {
+  const [lessonTitle, setLessonTitle]   = useState(selectedLesson?.title ?? '')
+  const [lessonDate, setLessonDate]     = useState(selectedLesson?.lesson_date ?? '')
+  const [sentences, setSentences]       = useState(selectedLesson?.sentences ?? '')
+  const [teacherNote, setTeacherNote]   = useState(selectedLesson?.teacher_note ?? '')
+  const [totalLessons, setTotalLessons] = useState(activeStudent?.total_lessons ?? 20)
+  const [focusSounds, setFocusSounds]   = useState<string[]>(selectedLesson?.focus_sounds ?? ['/θ/', '/ð/', '/r/'])
+  const [features, setFeatures]         = useState(activeStudent?.features ?? {
     personalized_lessons: true,
     record_feedback: true,
     sound_library: true,
@@ -63,7 +70,6 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
     progress_tracker: true,
   })
 
-  // When switching students, reset state
   const handleSelectStudent = (student: Student) => {
     setActiveStudentId(student.id)
     setEditorTab('lesson')
@@ -82,7 +88,6 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
     setFeatures(student.features)
   }
 
-  // When selecting a lesson dot
   const handleSelectLesson = (num: number) => {
     setSelectedLessonNum(num)
     const lesson = studentLessons.find(l => l.lesson_number === num)
@@ -109,6 +114,42 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
     setTimeout(() => setSavedMsg(''), 3000)
   }
 
+  const handleAddStudent = async () => {
+    if (!newName.trim() || !newEmail.trim()) {
+      setAddError('Name and email are required.')
+      return
+    }
+    setAddingStudent(true)
+    setAddError('')
+    setAddSuccess('')
+    try {
+      const res = await fetch('/api/add-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newName.trim(),
+          email: newEmail.trim(),
+          profession: newProfession.trim(),
+          location: newLocation.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setAddError(data.error ?? 'Something went wrong.')
+      } else {
+        setAddSuccess(`✅ ${newName} has been added! They'll receive an invite email to set their password.`)
+        setNewName('')
+        setNewEmail('')
+        setNewProfession('')
+        setNewLocation('')
+        router.refresh()
+      }
+    } catch {
+      setAddError('Network error — please try again.')
+    }
+    setAddingStudent(false)
+  }
+
   const handleSaveLesson = async () => {
     if (!activeStudent || !selectedLesson) return
     setSaving(true)
@@ -124,10 +165,7 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
   const handleSaveSounds = async () => {
     if (!selectedLesson) return
     setSaving(true)
-    await supabase
-      .from('lessons')
-      .update({ focus_sounds: focusSounds })
-      .eq('id', selectedLesson.id)
+    await supabase.from('lessons').update({ focus_sounds: focusSounds }).eq('id', selectedLesson.id)
     setSaving(false)
     showSaved('Focus sounds saved ✓')
     router.refresh()
@@ -136,10 +174,7 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
   const handleSaveFeatures = async () => {
     if (!activeStudent) return
     setSaving(true)
-    await supabase
-      .from('students')
-      .update({ features, total_lessons: totalLessons })
-      .eq('id', activeStudent.id)
+    await supabase.from('students').update({ features, total_lessons: totalLessons }).eq('id', activeStudent.id)
     setSaving(false)
     showSaved('Settings saved ✓')
     router.refresh()
@@ -175,6 +210,71 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
       <Sidebar isAdmin />
       <main className="main">
 
+        {/* Add New Student Modal */}
+        {showAddModal && (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{
+              background: '#fff', borderRadius: 16, padding: '2rem', width: '100%', maxWidth: 480,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
+            }}>
+              <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--teal)', marginBottom: '0.25rem' }}>
+                Add New Student
+              </div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: '1.5rem' }}>
+                They'll receive an email invite to set their password.
+              </div>
+
+              {addSuccess ? (
+                <div>
+                  <div style={{ background: 'rgba(16,185,129,0.1)', color: '#059669', padding: '1rem', borderRadius: 10, fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                    {addSuccess}
+                  </div>
+                  <button className="btn-save" onClick={() => { setShowAddModal(false); setAddSuccess('') }}>
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="form-section">
+                    <label className="form-label">Full Name *</label>
+                    <input className="form-input" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Maria Rodriguez" />
+                  </div>
+                  <div className="form-section">
+                    <label className="form-label">Email Address *</label>
+                    <input className="form-input" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="e.g. maria@hospital.com" />
+                  </div>
+                  <div className="form-section">
+                    <label className="form-label">Profession</label>
+                    <input className="form-input" value={newProfession} onChange={e => setNewProfession(e.target.value)} placeholder="e.g. Pharmacist" />
+                  </div>
+                  <div className="form-section">
+                    <label className="form-label">Location</label>
+                    <input className="form-input" value={newLocation} onChange={e => setNewLocation(e.target.value)} placeholder="e.g. Miami, FL" />
+                  </div>
+
+                  {addError && (
+                    <div style={{ color: 'var(--danger)', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                      {addError}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                    <button className="btn-save" onClick={handleAddStudent} disabled={addingStudent} style={{ flex: 1 }}>
+                      {addingStudent ? 'Adding…' : '+ Add Student'}
+                    </button>
+                    <button className="btn-pause" onClick={() => { setShowAddModal(false); setAddError('') }} style={{ flex: 1 }}>
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="brand-bar">
           <span className="brand-title">LangSolution Accent Clarity</span>
           <span className="admin-badge">Admin Panel</span>
@@ -188,18 +288,16 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
           <span className="breadcrumb-current">Admin</span>
         </div>
 
-        {/* Page header */}
         <div className="admin-page-header">
           <div>
             <div className="admin-page-title">Student Management</div>
             <div className="admin-page-sub">Manage lessons, sentences, scores and settings for each student</div>
           </div>
-          <button className="btn-add" onClick={() => alert('Add New Student — coming soon!')}>
+          <button className="btn-add" onClick={() => { setShowAddModal(true); setAddError(''); setAddSuccess('') }}>
             + Add New Student
           </button>
         </div>
 
-        {/* Stats */}
         <div className="admin-stats-row">
           <div className="stat-card">
             <div className="stat-card-num">{stats.activeStudents}</div>
@@ -219,7 +317,6 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
           </div>
         </div>
 
-        {/* Student grid */}
         <div className="student-grid">
           {students.map(student => {
             const progress = Math.round(((student.current_lesson - 1) / student.total_lessons) * 100)
@@ -260,11 +357,8 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
           })}
         </div>
 
-        {/* Editor panel */}
         {activeStudent && (
           <div className="editor-panel">
-
-            {/* Editor header */}
             <div className="editor-header">
               <div className="editor-header-title">✏️ Editing — {activeStudent.name}</div>
               <div className="editor-header-sub">
@@ -278,14 +372,12 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
               </div>
             </div>
 
-            {/* Saved message */}
             {savedMsg && (
               <div style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--success)', fontSize: '0.82rem', fontWeight: 600, padding: '0.5rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
                 {savedMsg}
               </div>
             )}
 
-            {/* Tabs */}
             <div className="editor-tabs">
               {(['lesson', 'sounds', 'features', 'progress'] as EditorTab[]).map(tab => (
                 <button
@@ -302,49 +394,28 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
             </div>
 
             <div className="editor-body">
-
-              {/* TAB: Lesson Content */}
               {editorTab === 'lesson' && (
                 <div>
-                  {/* Lesson selector dots */}
                   <div className="lesson-selector">
                     {Array.from({ length: activeStudent.total_lessons }, (_, i) => i + 1).map(n => {
                       const state = n === selectedLessonNum ? 'selected' : lessonDotState(n)
                       return (
-                        <button
-                          key={n}
-                          className={`ls-dot ${state}`}
-                          onClick={() => handleSelectLesson(n)}
-                          title={`Lesson ${n}`}
-                        >
+                        <button key={n} className={`ls-dot ${state}`} onClick={() => handleSelectLesson(n)} title={`Lesson ${n}`}>
                           {lessonDotState(n) === 'done' ? '✓' : n}
                         </button>
                       )
                     })}
                   </div>
-
                   <div className="form-row">
                     <div className="form-section">
                       <label className="form-label">Lesson Title</label>
-                      <input
-                        className="form-input"
-                        value={lessonTitle}
-                        onChange={e => setLessonTitle(e.target.value)}
-                        placeholder="e.g. Courtroom Communication"
-                      />
+                      <input className="form-input" value={lessonTitle} onChange={e => setLessonTitle(e.target.value)} placeholder="e.g. Courtroom Communication" />
                     </div>
                     <div className="form-section">
                       <label className="form-label">Date</label>
-                      <input
-                        className="form-input"
-                        value={lessonDate}
-                        onChange={e => setLessonDate(e.target.value)}
-                        placeholder="e.g. April 9, 2026"
-                      />
+                      <input className="form-input" value={lessonDate} onChange={e => setLessonDate(e.target.value)} placeholder="e.g. April 9, 2026" />
                     </div>
                   </div>
-
-                  {/* Highlight guide */}
                   <div className="highlight-guide">
                     <span>Markup guide:</span>
                     <div className="hl-guide-item">
@@ -360,7 +431,6 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
                       <span>[red]word[/red] — Common error</span>
                     </div>
                   </div>
-
                   <div className="form-section">
                     <label className="form-label">Sentences (one per line, use markup above)</label>
                     <textarea
@@ -371,19 +441,10 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
                       rows={8}
                     />
                   </div>
-
                   <div className="form-section">
                     <label className="form-label">Teacher Note (private — shown to student before recording)</label>
-                    <textarea
-                      className="form-textarea"
-                      value={teacherNote}
-                      onChange={e => setTeacherNote(e.target.value)}
-                      placeholder="Personal note to the student about this lesson..."
-                      rows={3}
-                      style={{ minHeight: 80 }}
-                    />
+                    <textarea className="form-textarea" value={teacherNote} onChange={e => setTeacherNote(e.target.value)} placeholder="Personal note to the student about this lesson..." rows={3} style={{ minHeight: 80 }} />
                   </div>
-
                   <div className="form-section">
                     <label className="form-label">Total Lessons in Journey</label>
                     <div className="count-picker">
@@ -394,14 +455,12 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
                       <button className="count-btn" onClick={() => setTotalLessons(l => Math.min(50, l + 5))}>+5</button>
                     </div>
                   </div>
-
                   <button className="btn-save" onClick={handleSaveLesson} disabled={saving}>
                     {saving ? 'Saving…' : `💾 Save Lesson ${selectedLessonNum}`}
                   </button>
                 </div>
               )}
 
-              {/* TAB: Focus Sounds */}
               {editorTab === 'sounds' && (
                 <div>
                   <div className="form-section">
@@ -411,11 +470,7 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
                     </p>
                     <div className="sounds-picker">
                       {ALL_SOUNDS.map(sound => (
-                        <button
-                          key={sound}
-                          className={`sound-pick ${focusSounds.includes(sound) ? 'selected' : ''}`}
-                          onClick={() => toggleSound(sound)}
-                        >
+                        <button key={sound} className={`sound-pick ${focusSounds.includes(sound) ? 'selected' : ''}`} onClick={() => toggleSound(sound)}>
                           {sound}
                         </button>
                       ))}
@@ -427,7 +482,6 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
                 </div>
               )}
 
-              {/* TAB: Features */}
               {editorTab === 'features' && (
                 <div>
                   <div className="form-section">
@@ -442,12 +496,7 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
                             <div className="feature-name">{feat.icon} {feat.name}</div>
                             <div className="feature-desc">{feat.desc}</div>
                           </div>
-                          <div
-                            className={`toggle ${features[feat.key] ? 'on' : ''}`}
-                            onClick={() => toggleFeature(feat.key)}
-                            role="switch"
-                            aria-checked={features[feat.key]}
-                          />
+                          <div className={`toggle ${features[feat.key] ? 'on' : ''}`} onClick={() => toggleFeature(feat.key)} role="switch" aria-checked={features[feat.key]} />
                         </div>
                       ))}
                     </div>
@@ -458,22 +507,18 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
                 </div>
               )}
 
-              {/* TAB: Progress */}
               {editorTab === 'progress' && (
                 <div>
                   <div className="form-section">
                     <label className="form-label">{activeStudent.name}&rsquo;s Score History</label>
                     {studentScoreList.length === 0 ? (
                       <div style={{ color: 'var(--muted)', fontSize: '0.85rem', padding: '1rem 0' }}>
-                        No scores recorded yet. Scores appear here after students complete and submit lessons.
+                        No scores recorded yet.
                       </div>
                     ) : (
                       <div className="score-history">
                         {studentScoreList.map(score => (
-                          <div
-                            key={score.id}
-                            className={`score-history-item ${score.lesson_number === activeStudent.current_lesson ? 'current-lesson' : ''}`}
-                          >
+                          <div key={score.id} className={`score-history-item ${score.lesson_number === activeStudent.current_lesson ? 'current-lesson' : ''}`}>
                             <div className="score-hist-num">{score.lesson_number}</div>
                             <div className="score-hist-info">
                               <div className="score-hist-title">{score.lesson_title ?? `Lesson ${score.lesson_number}`}</div>
@@ -482,8 +527,6 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
                             <div className="score-hist-score">{score.overall_score}%</div>
                           </div>
                         ))}
-
-                        {/* Current lesson — in progress */}
                         {!studentScoreList.find(s => s.lesson_number === activeStudent.current_lesson) && (
                           <div className="score-history-item current-lesson">
                             <div className="score-hist-num">{activeStudent.current_lesson}</div>
@@ -499,7 +542,6 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
                   </div>
                 </div>
               )}
-
             </div>
           </div>
         )}
