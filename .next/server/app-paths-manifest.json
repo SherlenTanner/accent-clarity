@@ -1,5 +1,7 @@
 {
-  "/api/add-student/route": "app/api/add-student/route.js",
-  "/admin/page": "app/admin/page.js",
-  "/login/page": "app/login/page.js"
+  "/_not-found/page": "app/_not-found/page.js",
+  "/sounds/page": "app/sounds/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/lesson/page": "app/lesson/page.js",
+  "/admin/page": "app/admin/page.js"
 }

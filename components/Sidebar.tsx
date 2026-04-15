@@ -14,9 +14,9 @@ const T = {
 
 const NAV = [
   { href: '/dashboard', icon: '👋', label: 'Welcome' },
-  { href: '/lesson',    icon: '📚', label: 'Lessons' }, 
-   { href: '/fluency',   icon: '🎯', label: 'Fluency' },
-  { href: '/sounds',    icon: '📊', label: 'Progress' },
+  { href: '/lesson',    icon: '📚', label: 'Lessons' },
+  { href: '/fluency',   icon: '🎯', label: 'Fluency' },
+  { href: '/sounds',    icon: '🔊', label: 'Sounds' },
   { href: '/notes',     icon: '📝', label: 'Notes' },
   { href: '/account',   icon: '👤', label: 'Account' },
 ]
@@ -55,7 +55,7 @@ export default function Sidebar({ isAdmin }: SidebarProps) {
     display: 'flex', flexDirection: 'column', alignItems: 'center',
     gap: 4, padding: '0.85rem 0', width: '100%', cursor: 'pointer',
     textDecoration: 'none', color: active ? T.teal : T.muted,
-    fontSize: '0.82rem', fontWeight: 600, position: 'relative',
+    fontSize: '1rem', fontWeight: 600, position: 'relative',
     background: 'none', border: 'none', fontFamily: T.font,
   })
 
@@ -72,23 +72,20 @@ export default function Sidebar({ isAdmin }: SidebarProps) {
     <aside style={sidebarStyle}>
       <div style={logoStyle}>🎙️</div>
       <div style={dividerStyle} />
-
       {items.map(item => {
         const active = pathname === item.href
         return (
           <Link key={item.href + item.label} href={item.href} style={navItem(active)} title={item.label}>
             {active && <div style={activeBar} />}
             <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>{item.icon}</span>
-            <span style={{ fontSize: '0.55rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</span>
           </Link>
         )
       })}
-
       <div style={{ flex: 1 }} />
-
       <button onClick={handleLogout} style={navItem(false)} title="Sign Out">
         <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>🚪</span>
-        <span style={{ fontSize: '0.55rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sign Out</span>
+        <span style={{ fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sign Out</span>
       </button>
     </aside>
   )
