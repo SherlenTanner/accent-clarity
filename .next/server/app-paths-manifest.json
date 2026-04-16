@@ -1,3 +1,5 @@
 {
-  "/fluency/page": "app/fluency/page.js"
+  "/admin/page": "app/admin/page.js",
+  "/fluency/page": "app/fluency/page.js",
+  "/dashboard/page": "app/dashboard/page.js"
 }

@@ -424,7 +424,8 @@ export default function FluencyPage() {
       {/* Fluency topic panel */}
       <aside style={{ width: 256, background: '#f6f9f8', borderRight: '1px solid #e0eeea', display: 'flex', flexDirection: 'column', overflowY: 'auto', flexShrink: 0 }}>
         <div style={{ padding: '18px 16px 12px', fontSize: 10.5, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: '#8aada5', display: 'flex', alignItems: 'center', gap: 7, borderBottom: '1px solid #e0eeea' }}>
-          🎯 Fluency Topics
+         <a href="/dashboard" style={{ display: 'block', padding: '10px 18px', fontSize: 12, color: '#1D9E75', fontWeight: 600, textDecoration: 'none', borderBottom: '1px solid #e0eeea', background: '#f0fdf8' }}>← Back to Dashboard</a> 
+          Fluency Topics
         </div>
         {TOPICS.map(t => {
           const isOpen = !!openGroups[t.id]
