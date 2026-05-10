@@ -134,7 +134,7 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
     setTeacherNote(lesson?.teacher_note ?? '')
     setFocusSounds(lesson?.focus_sounds ?? [])
     setTotalLessons(student.total_lessons)
-    setFeatures(student.features)
+    if (student.features) setFeatures(student.features)
   }
 
   const handleSelectLesson = (num: number) => {
