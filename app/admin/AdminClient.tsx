@@ -110,7 +110,7 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
   const [teacherNote, setTeacherNote]   = useState(selectedLesson?.teacher_note ?? '')
   const [totalLessons, setTotalLessons] = useState(activeStudent?.total_lessons ?? 20)
   const [focusSounds, setFocusSounds]   = useState<string[]>(selectedLesson?.focus_sounds ?? ['/θ/', '/ð/', '/r/'])
-  const [features, setFeatures]         = useState(activeStudent?.features ?? {
+  const [features, setFeatures]         = useState<any>(activeStudent?.features ?? {
     personalized_lessons: true,
     record_feedback: true,
     sound_library: true,
