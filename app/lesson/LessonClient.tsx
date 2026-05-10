@@ -10,6 +10,7 @@ interface Props {
 }
 
 type ColorTag = 'teal' | 'gold' | 'red' | 'purple'
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 function markupToHtml(text: string): string {
   if (!text) return ''
@@ -51,9 +52,13 @@ export default function LessonClient({ student, lesson }: Props) {
   const [feedbackText, setFeedbackText] = useState(lesson?.feedback ?? '')
   const [savingFeedback, setSavingFeedback] = useState(false)
   const [feedbackSaved, setFeedbackSaved] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null)
   const editorRef = useRef<HTMLDivElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
   const isAdmin = student.role === 'admin'
   const sentences = lesson?.sentences ? splitSentences(lesson.sentences) : []
 
@@ -211,9 +216,105 @@ export default function LessonClient({ student, lesson }: Props) {
     }
   }
 
-  const startRecording = () => { setRecording(true); setRecorded(false); setTimer(0) }
-  const stopRecording = () => { setRecording(false); setRecorded(true) }
-  const resetRecording = () => { setRecorded(false); setRecording(false); setTimer(0) }
+  // ─── REAL MICROPHONE RECORDING ───
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      recorderRef.current = recorder
+      chunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        const url = URL.createObjectURL(blob)
+        setRecordedUrl(url)
+        stream.getTracks().forEach(t => t.stop())
+        uploadRecording(blob)
+      }
+
+      recorder.start()
+      setRecording(true)
+      setRecorded(false)
+      setTimer(0)
+      setSaveStatus('idle')
+      setRecordedUrl(null)
+    } catch (err: any) {
+      console.error('Mic error:', err)
+      alert('Could not access microphone.\n\n' + (err?.message || String(err)) + '\n\nMake sure you allowed microphone permissions in your browser. On Chrome: click the lock icon in the address bar → Site settings → Microphone → Allow.')
+    }
+  }
+
+  const stopRecording = () => {
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      recorderRef.current.stop()
+    }
+    setRecording(false)
+    setRecorded(true)
+  }
+
+  const uploadRecording = async (blob: Blob) => {
+    if (!lesson) {
+      console.error('[Recording] No lesson context')
+      setSaveStatus('error')
+      return
+    }
+    setSaveStatus('saving')
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        console.error('[Recording] No user')
+        setSaveStatus('error')
+        return
+      }
+
+      const timestamp = Date.now()
+      const filename = `${user.id}/lesson-${lesson.id}-${timestamp}.webm`
+
+      const { error: uploadErr } = await supabase.storage
+        .from('recordings')
+        .upload(filename, blob, { contentType: 'audio/webm' })
+
+      if (uploadErr) {
+        console.error('[Recording] Upload error:', uploadErr)
+        setSaveStatus('error')
+        return
+      }
+
+      const context = `Lesson ${lesson.lesson_number ?? '?'} — ${lesson.title || 'Untitled'}`
+      const { error: dbErr } = await supabase.from('recordings').insert({
+        student_id: user.id,
+        page: 'lesson',
+        context: context,
+        storage_path: filename,
+      })
+
+      if (dbErr) {
+        console.error('[Recording] DB error:', dbErr)
+        setSaveStatus('error')
+        return
+      }
+
+      console.log('[Recording] Saved successfully:', filename)
+      setSaveStatus('saved')
+    } catch (err) {
+      console.error('[Recording] Save error:', err)
+      setSaveStatus('error')
+    }
+  }
+
+  const resetRecording = () => {
+    setRecorded(false)
+    setRecording(false)
+    setTimer(0)
+    setSaveStatus('idle')
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+    setRecordedUrl(null)
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafb' }}>
@@ -615,7 +716,7 @@ export default function LessonClient({ student, lesson }: Props) {
                     fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
                   }}>
-                    ⏹ Stop &amp; Get AI Feedback
+                    ⏹ Stop &amp; Save Recording
                   </button>
                 )}
 
@@ -628,16 +729,34 @@ export default function LessonClient({ student, lesson }: Props) {
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     }}>
                       <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1a7a7a' }}>
-                        🤖 AI Feedback
+                        🎙️ Your Recording
                       </div>
-                      <div style={{ fontSize: '0.78rem', color: '#6b7280', fontStyle: 'italic' }}>Coming soon</div>
+                      <div style={{ fontSize: '0.78rem', color: '#6b7280', fontStyle: 'italic' }}>
+                        {saveStatus === 'saving' && '⏳ Saving…'}
+                        {saveStatus === 'saved' && '✅ Saved'}
+                        {saveStatus === 'error' && '⚠️ Save failed'}
+                        {saveStatus === 'idle' && 'Ready'}
+                      </div>
                     </div>
                     <div style={{ padding: '1.5rem', textAlign: 'center' }}>
-                      <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🎙️</div>
-                      <div style={{ fontWeight: 700, color: '#1a1a2e', marginBottom: '0.4rem', fontSize: '1rem' }}>Recording saved!</div>
-                      <div style={{ fontSize: '0.82rem', color: '#6b7280', lineHeight: 1.6, maxWidth: '280px', margin: '0 auto 1.2rem' }}>
-                        Sherlen will review this before your next session. AI scoring powered by Gemini is coming soon.
-                      </div>
+                      {recordedUrl && (
+                        <audio controls src={recordedUrl} style={{ width: '100%', marginBottom: '1rem' }} />
+                      )}
+                      {saveStatus === 'saving' && (
+                        <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1rem' }}>
+                          Uploading your recording to your lesson…
+                        </div>
+                      )}
+                      {saveStatus === 'saved' && (
+                        <div style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 600, marginBottom: '1rem' }}>
+                          Recording saved! Sherlen will review this before your next session.
+                        </div>
+                      )}
+                      {saveStatus === 'error' && (
+                        <div style={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 600, marginBottom: '1rem' }}>
+                          Something went wrong saving the recording. Try again.
+                        </div>
+                      )}
                       <button type="button" onClick={resetRecording} style={{
                         padding: '0.75rem 1.5rem', background: '#fff', color: '#1a7a7a',
                         border: '1px solid #1a7a7a', borderRadius: '10px',

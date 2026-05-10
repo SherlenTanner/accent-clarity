@@ -17,6 +17,7 @@ const NAV = [
   { href: '/lesson',    icon: '📚', label: 'Lessons' },
   { href: '/fluency',   icon: '🎯', label: 'Fluency' },
   { href: '/sounds',    icon: '🔊', label: 'Sounds' },
+  { href: '/mic-test', icon: '🎙️', label: 'Mic Test' },
   { href: '/notes',     icon: '📝', label: 'Notes' },
   { href: '/account',   icon: '👤', label: 'Account' },
 ]
