@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
+import MicCheck from '@/components/MicCheck'
 import { createClient } from '@/lib/supabase'
 
 interface Sound {
@@ -243,6 +244,7 @@ export default function SoundsPage() {
   const [activeSound, setActiveSound]   = useState<Sound>(SOUNDS[0])
   const [activeTab, setActiveTab]       = useState<string>(SOUNDS[0].tabs[0].id)
   const [recording, setRecording]       = useState(false)
+  const [audioUrl, setAudioUrl]         = useState<string | null>(null)
   const [isAdmin, setIsAdmin]           = useState(false)
   const [editorOpen, setEditorOpen]     = useState(false)
   const [dbData, setDbData]             = useState<Record<string, { data: Sound; image_url: string | null }>>({})
@@ -254,6 +256,13 @@ export default function SoundsPage() {
   const [editImageUrl, setEditImageUrl]   = useState<string | null>(null)
   const [saving, setSaving]               = useState(false)
   const [saveMsg, setSaveMsg]             = useState('')
+
+  // ── Mic check popup ──
+  const [showMicCheck, setShowMicCheck] = useState(false)
+
+  // ── Media recorder refs ──
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
@@ -289,7 +298,67 @@ export default function SoundsPage() {
     setActiveSound(sound)
     setActiveTab(sound.tabs[0].id)
     setRecording(false)
+    setAudioUrl(null)
     setEditorOpen(false)
+  }
+
+  // ── Recording logic ──
+  function hasPassedMicCheck(): boolean {
+    try {
+      return localStorage.getItem('accentClarity_micCheckPassed') === 'true'
+    } catch { return false }
+  }
+
+  async function handleRecordClick() {
+    if (recording) {
+      stopRecording()
+      return
+    }
+    if (!hasPassedMicCheck()) {
+      setShowMicCheck(true)
+      return
+    }
+    await startRecording()
+  }
+
+  async function startRecording() {
+    try {
+      setAudioUrl(null)
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      recorderRef.current = recorder
+      chunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        setAudioUrl(URL.createObjectURL(blob))
+        stream.getTracks().forEach(t => t.stop())
+      }
+      recorder.start()
+      setRecording(true)
+    } catch (err) {
+      alert('Could not access microphone. Please check your browser permissions.')
+      setRecording(false)
+    }
+  }
+
+  function stopRecording() {
+    if (recorderRef.current && recorderRef.current.state === 'recording') {
+      recorderRef.current.stop()
+    }
+    setRecording(false)
+  }
+
+  async function handleMicCheckPass() {
+    setShowMicCheck(false)
+    await startRecording()
+  }
+
+  function handleMicCheckCancel() {
+    setShowMicCheck(false)
   }
 
   const openEditor = () => {
@@ -369,6 +438,10 @@ export default function SoundsPage() {
 
   return (
     <div className="layout">
+      {showMicCheck && (
+        <MicCheck onPass={handleMicCheckPass} onCancel={handleMicCheckCancel} />
+      )}
+
       <Sidebar />
       <main className="main">
         <div className="brand-bar">
@@ -666,13 +739,22 @@ export default function SoundsPage() {
               )}
 
               {!recording ? (
-                <button className="btn-record" onClick={() => setRecording(true)}>
+                <button className="btn-record" onClick={handleRecordClick}>
                   🎙️ Start Recording
                 </button>
               ) : (
-                <button className="btn-stop" onClick={() => setRecording(false)}>
-                  ⏹ Stop &amp; Get Feedback
+                <button className="btn-stop" onClick={handleRecordClick}>
+                  ⏹ Stop Recording
                 </button>
+              )}
+
+              {audioUrl && (
+                <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f9f9', border: '1px solid #dceee9', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#0F6E56', marginBottom: '0.5rem' }}>
+                    ▶️ Your recording
+                  </div>
+                  <audio controls src={audioUrl} style={{ width: '100%' }} />
+                </div>
               )}
             </div>
 

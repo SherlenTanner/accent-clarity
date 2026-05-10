@@ -1,8 +1,8 @@
-// File: /Users/Sherlen/Desktop/Accent Clarity/app/fluency/page.tsx
-import * as entry from '../../../../app/fluency/page.js'
+// File: /Users/Sherlen/Desktop/Accent Clarity/app/lesson/page.tsx
+import * as entry from '../../../../app/lesson/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
-type TEntry = typeof import('../../../../app/fluency/page.js')
+type TEntry = typeof import('../../../../app/lesson/page.js')
 
 // Check that the entry is a valid entry
 checkFields<Diff<{

@@ -9,9 +9,39 @@ interface Props {
   lesson: Lesson | null
 }
 
+type ColorTag = 'teal' | 'gold' | 'red' | 'purple'
+
+function markupToHtml(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/\[teal\](.*?)\[\/teal\]/g, '<span data-color="teal" style="background:#e8f5f5;border:1px solid #1a7a7a;border-radius:4px;padding:1px 4px;">$1</span>')
+    .replace(/\[gold\](.*?)\[\/gold\]/g, '<span data-color="gold" style="background:rgba(201,168,76,0.2);border:2px solid #c9a84c;border-radius:4px;padding:1px 4px;">$1</span>')
+    .replace(/\[red\](.*?)\[\/red\]/g, '<span data-color="red" style="background:rgba(239,68,68,0.1);border:2px solid #ef4444;border-radius:4px;padding:1px 4px;">$1</span>')
+    .replace(/\[purple\](.*?)\[\/purple\]/g, '<span data-color="purple" style="background:rgba(127,119,221,0.15);border:2px solid #7F77DD;border-radius:4px;padding:1px 4px;">$1</span>')
+    .replace(/\n/g, '<br>')
+}
+
+function htmlToMarkup(html: string): string {
+  if (!html) return ''
+  const tmp = document.createElement('div')
+  tmp.innerHTML = html
+  const spans = tmp.querySelectorAll('span[data-color]')
+  spans.forEach(span => {
+    const color = span.getAttribute('data-color')
+    const text = span.textContent || ''
+    span.replaceWith(`[${color}]${text}[/${color}]`)
+  })
+  let result = tmp.innerHTML
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<div[^>]*>/gi, '')
+  const cleanup = document.createElement('div')
+  cleanup.innerHTML = result
+  return cleanup.textContent || cleanup.innerText || ''
+}
+
 export default function LessonClient({ student, lesson }: Props) {
   const [editorOpen, setEditorOpen] = useState(false)
-  const [editorText, setEditorText] = useState(lesson?.sentences ?? '')
   const [saving, setSaving] = useState(false)
   const [recording, setRecording] = useState(false)
   const [recorded, setRecorded] = useState(false)
@@ -21,11 +51,17 @@ export default function LessonClient({ student, lesson }: Props) {
   const [feedbackText, setFeedbackText] = useState(lesson?.feedback ?? '')
   const [savingFeedback, setSavingFeedback] = useState(false)
   const [feedbackSaved, setFeedbackSaved] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const isAdmin = student.role === 'admin'
   const sentences = lesson?.sentences ? splitSentences(lesson.sentences) : []
+
+  useEffect(() => {
+    if (editorOpen && editorRef.current) {
+      editorRef.current.innerHTML = markupToHtml(lesson?.sentences ?? '')
+    }
+  }, [editorOpen, lesson?.sentences])
 
   useEffect(() => {
     if (recording) {
@@ -38,34 +74,95 @@ export default function LessonClient({ student, lesson }: Props) {
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
-  const wrapSelection = (tag: 'teal' | 'gold' | 'red') => {
-    const ta = textareaRef.current
-    if (!ta) return
-    const start = ta.selectionStart
-    const end = ta.selectionEnd
-    const selected = editorText.substring(start, end)
-    if (!selected) return
-    const newText =
-      editorText.substring(0, start) +
-      `[${tag}]${selected}[/${tag}]` +
-      editorText.substring(end)
-    setEditorText(newText)
+  const applyColor = (color: ColorTag) => {
+    const editor = editorRef.current
+    if (!editor) return
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+    const range = selection.getRangeAt(0)
+    if (range.collapsed) return
+
+    let parent: Node | null = range.commonAncestorContainer
+    while (parent && parent !== editor) {
+      if (parent.nodeType === 1) {
+        const el = parent as HTMLElement
+        if (el.tagName === 'SPAN' && el.hasAttribute('data-color')) {
+          const existingColor = el.getAttribute('data-color')
+          if (existingColor === color) {
+            const textNode = document.createTextNode(el.textContent || '')
+            el.replaceWith(textNode)
+            selection.removeAllRanges()
+            return
+          }
+          const newSpan = makeColoredSpan(el.textContent || '', color)
+          el.replaceWith(newSpan)
+          selection.removeAllRanges()
+          return
+        }
+      }
+      parent = parent.parentNode
+    }
+
+    const selectedText = range.toString()
+    if (!selectedText) return
+    const span = makeColoredSpan(selectedText, color)
+    range.deleteContents()
+    range.insertNode(span)
+    selection.removeAllRanges()
+  }
+
+  const makeColoredSpan = (text: string, color: ColorTag): HTMLSpanElement => {
+    const span = document.createElement('span')
+    span.setAttribute('data-color', color)
+    if (color === 'teal') {
+      span.style.cssText = 'background:#e8f5f5;border:1px solid #1a7a7a;border-radius:4px;padding:1px 4px;'
+    } else if (color === 'gold') {
+      span.style.cssText = 'background:rgba(201,168,76,0.2);border:2px solid #c9a84c;border-radius:4px;padding:1px 4px;'
+    } else if (color === 'red') {
+      span.style.cssText = 'background:rgba(239,68,68,0.1);border:2px solid #ef4444;border-radius:4px;padding:1px 4px;'
+    } else if (color === 'purple') {
+      span.style.cssText = 'background:rgba(127,119,221,0.15);border:2px solid #7F77DD;border-radius:4px;padding:1px 4px;'
+    }
+    span.textContent = text
+    return span
   }
 
   const handleSave = async () => {
-    if (!lesson) return
+    console.log('[Save] Save button clicked')
+    if (!lesson) {
+      console.log('[Save] No lesson — aborting')
+      alert('No lesson found to save to.')
+      return
+    }
+    if (!editorRef.current) {
+      console.log('[Save] Editor ref not ready — aborting')
+      alert('Editor not ready. Please try again.')
+      return
+    }
     setSaving(true)
-    const supabase = createClient()
-    const { error } = await supabase
-      .from('lessons')
-      .update({ sentences: editorText })
-      .eq('id', lesson.id)
-    setSaving(false)
-    if (error) {
-      alert('Save failed: ' + error.message)
-    } else {
-      setEditorOpen(false)
-      window.location.reload()
+    const html = editorRef.current.innerHTML
+    console.log('[Save] Editor HTML:', html)
+    const markup = htmlToMarkup(html)
+    console.log('[Save] Markup to save:', markup)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('lessons')
+        .update({ sentences: markup })
+        .eq('id', lesson.id)
+      setSaving(false)
+      if (error) {
+        console.error('[Save] Supabase error:', error)
+        alert('Save failed: ' + error.message)
+      } else {
+        console.log('[Save] Saved successfully!')
+        setEditorOpen(false)
+        window.location.reload()
+      }
+    } catch (err: any) {
+      setSaving(false)
+      console.error('[Save] Exception:', err)
+      alert('Save threw an error: ' + (err?.message || String(err)))
     }
   }
 
@@ -123,12 +220,10 @@ export default function LessonClient({ student, lesson }: Props) {
       <Sidebar />
       <main style={{ flex: 1, marginLeft: '80px', padding: '2rem 2.5rem', fontFamily: 'DM Sans, sans-serif' }}>
 
-        {/* Breadcrumb */}
         <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
           LangSolution › Accent Clarity › Legal Track › My Personalized Lesson
         </div>
 
-        {/* Header */}
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
@@ -146,10 +241,8 @@ export default function LessonClient({ student, lesson }: Props) {
           </p>
         </div>
 
-        {/* Main panel */}
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden', position: 'relative' }}>
 
-          {/* ── FLOATING VIDEO — top right corner ── */}
           <div style={{
             position: 'absolute', top: '1rem', right: '1rem', zIndex: 10,
             width: '260px',
@@ -167,6 +260,7 @@ export default function LessonClient({ student, lesson }: Props) {
               {isAdmin && (
                 <>
                   <button
+                    type="button"
                     onClick={() => videoInputRef.current?.click()}
                     disabled={uploadingVideo}
                     style={{
@@ -256,7 +350,6 @@ export default function LessonClient({ student, lesson }: Props) {
             </div>
           </div>
 
-          {/* Panel header */}
           <div style={{
             padding: '1.1rem 1.5rem', borderBottom: '1px solid #e5e7eb',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -267,6 +360,7 @@ export default function LessonClient({ student, lesson }: Props) {
             </div>
             {isAdmin && (
               <button
+                type="button"
                 onClick={() => setEditorOpen(!editorOpen)}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
@@ -286,35 +380,69 @@ export default function LessonClient({ student, lesson }: Props) {
 
             {editorOpen && isAdmin ? (
               <div>
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                  {(['teal', 'gold', 'red'] as const).map(tag => (
-                    <button key={tag} onClick={() => wrapSelection(tag)} style={{
-                      background: tag === 'teal' ? '#1a7a7a' : tag === 'gold' ? '#c9a84c' : '#c44',
-                      color: '#fff', border: 'none', padding: '0.4rem 0.8rem',
-                      borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem',
-                    }}>
-                      {tag === 'teal' ? 'Teal (focus)' : tag === 'gold' ? 'Gold (watch)' : 'Red (error)'}
-                    </button>
-                  ))}
+                <div style={{
+                  background: '#f8fafb', border: '1px solid #e5e7eb', borderRadius: '8px',
+                  padding: '0.7rem 1rem', marginBottom: '0.8rem', fontSize: '0.82rem',
+                  color: '#6b7280', lineHeight: 1.5,
+                }}>
+                  <strong style={{ color: '#1a1a2e' }}>How to highlight:</strong> Type your sentences below. Select a word with your mouse, then click a color button. Click the same color again to remove it.
                 </div>
-                <textarea
-                  ref={textareaRef}
-                  value={editorText}
-                  onChange={(e) => setEditorText(e.target.value)}
-                  placeholder="Type sentences here. Select a word and click a color button to highlight it."
+
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                  <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyColor('teal')} style={{
+                    background: '#1a7a7a', color: '#fff', border: 'none',
+                    padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer',
+                    fontSize: '0.82rem', fontWeight: 600,
+                    display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                  }}>
+                    🟢 Go (practice this)
+                  </button>
+                  <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyColor('gold')} style={{
+                    background: '#c9a84c', color: '#fff', border: 'none',
+                    padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer',
+                    fontSize: '0.82rem', fontWeight: 600,
+                    display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                  }}>
+                    🟡 Caution (watch this)
+                  </button>
+                  <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyColor('red')} style={{
+                    background: '#ef4444', color: '#fff', border: 'none',
+                    padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer',
+                    fontSize: '0.82rem', fontWeight: 600,
+                    display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                  }}>
+                    🔴 Stop (common error)
+                  </button>
+                  <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyColor('purple')} style={{
+                    background: '#7F77DD', color: '#fff', border: 'none',
+                    padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer',
+                    fontSize: '0.82rem', fontWeight: 600,
+                    display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                  }}>
+                    💜 Open Up (open mouth)
+                  </button>
+                </div>
+
+                <div
+                  ref={editorRef}
+                  contentEditable
+                  suppressContentEditableWarning
                   style={{
-                    width: '100%', minHeight: '200px', padding: '0.75rem',
-                    border: '2px solid #1a7a7a', borderRadius: '8px', fontSize: '1rem',
-                    fontFamily: 'DM Sans, sans-serif', resize: 'vertical',
+                    width: '100%', minHeight: '200px', padding: '0.9rem 1rem',
+                    border: '2px solid #1a7a7a', borderRadius: '8px',
+                    fontSize: '1.05rem', fontFamily: 'Cormorant Garamond, serif',
+                    lineHeight: 1.8, color: '#1a1a2e', background: '#fff',
+                    outline: 'none', whiteSpace: 'pre-wrap',
                   }}
                 />
+
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-                  <button onClick={handleSave} disabled={saving} style={{
+                  <button type="button" onClick={handleSave} disabled={saving} style={{
                     background: '#1a7a7a', color: '#fff', border: 'none',
                     padding: '0.6rem 1.25rem', borderRadius: '6px',
                     cursor: saving ? 'wait' : 'pointer', fontSize: '0.9rem', fontWeight: 600,
                   }}>{saving ? 'Saving…' : '💾 Save'}</button>
-                  <button onClick={() => { setEditorText(lesson?.sentences ?? ''); setEditorOpen(false) }} style={{
+                  <button type="button" onClick={() => setEditorOpen(false)} style={{
                     background: '#eee', color: '#333', border: 'none',
                     padding: '0.6rem 1.25rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem',
                   }}>Cancel</button>
@@ -322,7 +450,6 @@ export default function LessonClient({ student, lesson }: Props) {
               </div>
             ) : (
               <div>
-                {/* Teacher note */}
                 {lesson?.teacher_note && (
                   <div style={{
                     background: 'rgba(201,168,76,0.07)', border: '1px solid rgba(201,168,76,0.25)',
@@ -335,7 +462,6 @@ export default function LessonClient({ student, lesson }: Props) {
                   </div>
                 )}
 
-                {/* Step 1 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
                   <div style={{
                     width: '20px', height: '20px', background: '#1a7a7a', color: '#fff',
@@ -347,24 +473,6 @@ export default function LessonClient({ student, lesson }: Props) {
                   </div>
                 </div>
 
-                {/* Color legend */}
-                <div style={{
-                  display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem',
-                  padding: '0.7rem 1rem', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px',
-                }}>
-                  {[
-                    { color: '#e8f5f5', border: '1px solid #1a7a7a', label: 'Focus sound' },
-                    { color: 'rgba(201,168,76,0.2)', border: '2px solid #c9a84c', label: 'Watch this word' },
-                    { color: 'rgba(239,68,68,0.1)', border: '2px solid #ef4444', label: 'Common error here' },
-                  ].map((item, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.72rem', color: '#6b7280' }}>
-                      <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: item.color, border: item.border }} />
-                      {item.label}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Sentences */}
                 {sentences.length > 0 ? (
                   <div style={{
                     border: '1px solid #e5e7eb', borderLeft: '4px solid #1a7a7a',
@@ -392,7 +500,45 @@ export default function LessonClient({ student, lesson }: Props) {
                   <div style={{ color: '#888', marginBottom: '1rem' }}>No sentences yet.</div>
                 )}
 
-                {/* Focus sounds */}
+                <div style={{
+                  background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px',
+                  padding: '0.9rem 1.1rem', marginBottom: '1.2rem',
+                }}>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6b7280', marginBottom: '0.6rem' }}>
+                    🚦 Color Guide
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.82rem', color: '#2d2d2d' }}>
+                      <span style={{
+                        background: '#e8f5f5', border: '1px solid #1a7a7a', borderRadius: '4px',
+                        padding: '1px 6px', fontFamily: 'Cormorant Garamond, serif', fontSize: '0.95rem',
+                      }}>green</span>
+                      <strong style={{ color: '#1a7a7a' }}>GO</strong> — practice this sound
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.82rem', color: '#2d2d2d' }}>
+                      <span style={{
+                        background: 'rgba(201,168,76,0.2)', border: '2px solid #c9a84c', borderRadius: '4px',
+                        padding: '1px 6px', fontFamily: 'Cormorant Garamond, serif', fontSize: '0.95rem',
+                      }}>gold</span>
+                      <strong style={{ color: '#c9a84c' }}>CAUTION</strong> — be careful here
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.82rem', color: '#2d2d2d' }}>
+                      <span style={{
+                        background: 'rgba(239,68,68,0.1)', border: '2px solid #ef4444', borderRadius: '4px',
+                        padding: '1px 6px', fontFamily: 'Cormorant Garamond, serif', fontSize: '0.95rem',
+                      }}>red</span>
+                      <strong style={{ color: '#ef4444' }}>STOP</strong> — common error
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.82rem', color: '#2d2d2d' }}>
+                      <span style={{
+                        background: 'rgba(127,119,221,0.15)', border: '2px solid #7F77DD', borderRadius: '4px',
+                        padding: '1px 6px', fontFamily: 'Cormorant Garamond, serif', fontSize: '0.95rem',
+                      }}>open</span>
+                      <strong style={{ color: '#7F77DD' }}>OPEN UP</strong> — open mouth, lengthen vowel
+                    </div>
+                  </div>
+                </div>
+
                 {lesson?.focus_sounds && lesson.focus_sounds.length > 0 && (
                   <div style={{ padding: '1rem 0', borderTop: '1px solid #e5e7eb', marginBottom: '1.2rem' }}>
                     <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6b7280', marginBottom: '0.7rem' }}>
@@ -410,10 +556,8 @@ export default function LessonClient({ student, lesson }: Props) {
                   </div>
                 )}
 
-                {/* Divider */}
                 <div style={{ borderTop: '2px dashed #e5e7eb', margin: '1.2rem 0' }} />
 
-                {/* Step 2 — Record */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
                   <div style={{
                     width: '20px', height: '20px', background: '#1a7a7a', color: '#fff',
@@ -434,7 +578,6 @@ export default function LessonClient({ student, lesson }: Props) {
                   💡 Read <strong style={{ color: '#1a7a7a' }}>all sentences</strong> clearly. They stay visible the whole time. Take your time.
                 </div>
 
-                {/* Waveform */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px', height: '44px', margin: '0.8rem 0' }}>
                   {[10,18,28,36,28,20,32,22,14,26,34,18].map((h, i) => (
                     <div key={i} style={{
@@ -455,7 +598,7 @@ export default function LessonClient({ student, lesson }: Props) {
                 )}
 
                 {!recording && !recorded && (
-                  <button onClick={startRecording} style={{
+                  <button type="button" onClick={startRecording} style={{
                     width: '100%', padding: '0.95rem', background: '#1a7a7a', color: '#fff',
                     border: 'none', borderRadius: '10px', fontFamily: 'DM Sans, sans-serif',
                     fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
@@ -466,7 +609,7 @@ export default function LessonClient({ student, lesson }: Props) {
                 )}
 
                 {recording && (
-                  <button onClick={stopRecording} style={{
+                  <button type="button" onClick={stopRecording} style={{
                     width: '100%', padding: '0.95rem', background: '#ef4444', color: '#fff',
                     border: 'none', borderRadius: '10px', fontFamily: 'DM Sans, sans-serif',
                     fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
@@ -495,7 +638,7 @@ export default function LessonClient({ student, lesson }: Props) {
                       <div style={{ fontSize: '0.82rem', color: '#6b7280', lineHeight: 1.6, maxWidth: '280px', margin: '0 auto 1.2rem' }}>
                         Sherlen will review this before your next session. AI scoring powered by Gemini is coming soon.
                       </div>
-                      <button onClick={resetRecording} style={{
+                      <button type="button" onClick={resetRecording} style={{
                         padding: '0.75rem 1.5rem', background: '#fff', color: '#1a7a7a',
                         border: '1px solid #1a7a7a', borderRadius: '10px',
                         fontFamily: 'DM Sans, sans-serif', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
@@ -506,10 +649,8 @@ export default function LessonClient({ student, lesson }: Props) {
                   </div>
                 )}
 
-                {/* ── DIVIDER ── */}
                 <div style={{ borderTop: '2px dashed #e5e7eb', margin: '1.5rem 0' }} />
 
-                {/* ── FEEDBACK FROM SHERLEN ── */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                   <div style={{
                     width: '20px', height: '20px', background: '#c9a84c', color: '#fff',
@@ -521,7 +662,6 @@ export default function LessonClient({ student, lesson }: Props) {
                   </div>
                 </div>
 
-                {/* Admin sees edit box */}
                 {isAdmin ? (
                   <div>
                     <textarea
@@ -535,7 +675,7 @@ export default function LessonClient({ student, lesson }: Props) {
                       }}
                     />
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
-                      <button onClick={handleSaveFeedback} disabled={savingFeedback} style={{
+                      <button type="button" onClick={handleSaveFeedback} disabled={savingFeedback} style={{
                         background: '#c9a84c', color: '#fff', border: 'none',
                         padding: '0.6rem 1.25rem', borderRadius: '6px',
                         cursor: savingFeedback ? 'wait' : 'pointer', fontSize: '0.9rem', fontWeight: 600,
@@ -550,7 +690,6 @@ export default function LessonClient({ student, lesson }: Props) {
                     </div>
                   </div>
                 ) : (
-                  /* Student sees the feedback card */
                   lesson?.feedback ? (
                     <div style={{
                       background: 'rgba(201,168,76,0.07)', border: '1px solid rgba(201,168,76,0.3)',

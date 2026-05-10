@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
@@ -24,6 +24,53 @@ const ALL_SOUNDS = ['/θ/', '/ð/', '/r/', '/v/', '/w/', '/h/', '/æ/', '/ə/', 
 
 type EditorTab = 'lesson' | 'sounds' | 'features' | 'progress'
 
+type ColorTag = 'teal' | 'gold' | 'red' | 'purple'
+
+function markupToHtml(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/\[teal\](.*?)\[\/teal\]/g, '<span data-color="teal" style="background:#e8f5f5;border:1px solid #1a7a7a;border-radius:4px;padding:1px 4px;">$1</span>')
+    .replace(/\[gold\](.*?)\[\/gold\]/g, '<span data-color="gold" style="background:rgba(201,168,76,0.2);border:2px solid #c9a84c;border-radius:4px;padding:1px 4px;">$1</span>')
+    .replace(/\[red\](.*?)\[\/red\]/g, '<span data-color="red" style="background:rgba(239,68,68,0.1);border:2px solid #ef4444;border-radius:4px;padding:1px 4px;">$1</span>')
+    .replace(/\[purple\](.*?)\[\/purple\]/g, '<span data-color="purple" style="background:rgba(127,119,221,0.15);border:2px solid #7F77DD;border-radius:4px;padding:1px 4px;">$1</span>')
+    .replace(/\n/g, '<br>')
+}
+
+function htmlToMarkup(html: string): string {
+  if (!html) return ''
+  const tmp = document.createElement('div')
+  tmp.innerHTML = html
+  const spans = tmp.querySelectorAll('span[data-color]')
+  spans.forEach(span => {
+    const color = span.getAttribute('data-color')
+    const text = span.textContent || ''
+    span.replaceWith(`[${color}]${text}[/${color}]`)
+  })
+  let result = tmp.innerHTML
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<div[^>]*>/gi, '')
+  const cleanup = document.createElement('div')
+  cleanup.innerHTML = result
+  return cleanup.textContent || cleanup.innerText || ''
+}
+
+function makeColoredSpan(text: string, color: ColorTag): HTMLSpanElement {
+  const span = document.createElement('span')
+  span.setAttribute('data-color', color)
+  if (color === 'teal') {
+    span.style.cssText = 'background:#e8f5f5;border:1px solid #1a7a7a;border-radius:4px;padding:1px 4px;'
+  } else if (color === 'gold') {
+    span.style.cssText = 'background:rgba(201,168,76,0.2);border:2px solid #c9a84c;border-radius:4px;padding:1px 4px;'
+  } else if (color === 'red') {
+    span.style.cssText = 'background:rgba(239,68,68,0.1);border:2px solid #ef4444;border-radius:4px;padding:1px 4px;'
+  } else if (color === 'purple') {
+    span.style.cssText = 'background:rgba(127,119,221,0.15);border:2px solid #7F77DD;border-radius:4px;padding:1px 4px;'
+  }
+  span.textContent = text
+  return span
+}
+
 export default function AdminClient({ students, allLessons, allScores, studentScores, stats, adminName }: Props) {
   const [activeStudentId, setActiveStudentId] = useState<string | null>(
     students.length > 0 ? students[0].id : null
@@ -44,6 +91,8 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
 
   const router = useRouter()
   const supabase = createClient()
+
+  const editorRef = useRef<HTMLDivElement>(null)
 
   const activeStudent = students.find(s => s.id === activeStudentId) ?? null
 
@@ -153,13 +202,61 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
   const handleSaveLesson = async () => {
     if (!activeStudent || !selectedLesson) return
     setSaving(true)
+    // Read sentences from the visual editor (convert back to bracket markup)
+    const sentencesToSave = editorRef.current ? htmlToMarkup(editorRef.current.innerHTML) : sentences
     await supabase
       .from('lessons')
-      .update({ title: lessonTitle, lesson_date: lessonDate, sentences, teacher_note: teacherNote, focus_sounds: focusSounds })
+      .update({ title: lessonTitle, lesson_date: lessonDate, sentences: sentencesToSave, teacher_note: teacherNote, focus_sounds: focusSounds })
       .eq('id', selectedLesson.id)
+    setSentences(sentencesToSave)
     setSaving(false)
     showSaved('Lesson saved ✓')
     router.refresh()
+  }
+
+  // Load the visual editor with the saved markup whenever the lesson changes or tab opens
+  useEffect(() => {
+    if (editorTab === 'lesson' && editorRef.current) {
+      editorRef.current.innerHTML = markupToHtml(sentences)
+    }
+  }, [sentences, editorTab, selectedLessonNum, activeStudentId])
+
+  // Apply or toggle a color on the selected text in the editor
+  const applyColor = (color: ColorTag) => {
+    const editor = editorRef.current
+    if (!editor) return
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+    const range = selection.getRangeAt(0)
+    if (range.collapsed) return
+
+    let parent: Node | null = range.commonAncestorContainer
+    while (parent && parent !== editor) {
+      if (parent.nodeType === 1) {
+        const el = parent as HTMLElement
+        if (el.tagName === 'SPAN' && el.hasAttribute('data-color')) {
+          const existingColor = el.getAttribute('data-color')
+          if (existingColor === color) {
+            const textNode = document.createTextNode(el.textContent || '')
+            el.replaceWith(textNode)
+            selection.removeAllRanges()
+            return
+          }
+          const newSpan = makeColoredSpan(el.textContent || '', color)
+          el.replaceWith(newSpan)
+          selection.removeAllRanges()
+          return
+        }
+      }
+      parent = parent.parentNode
+    }
+
+    const selectedText = range.toString()
+    if (!selectedText) return
+    const span = makeColoredSpan(selectedText, color)
+    range.deleteContents()
+    range.insertNode(span)
+    selection.removeAllRanges()
   }
 
   const handleSaveSounds = async () => {
@@ -416,29 +513,48 @@ export default function AdminClient({ students, allLessons, allScores, studentSc
                       <input className="form-input" value={lessonDate} onChange={e => setLessonDate(e.target.value)} placeholder="e.g. April 9, 2026" />
                     </div>
                   </div>
-                  <div className="highlight-guide">
-                    <span>Markup guide:</span>
-                    <div className="hl-guide-item">
-                      <div className="hl-guide-dot" style={{ background: 'rgba(26,122,122,0.4)', border: '1.5px solid var(--teal)' }} />
-                      <span>[teal]word[/teal] — Focus sound</span>
-                    </div>
-                    <div className="hl-guide-item">
-                      <div className="hl-guide-dot" style={{ background: 'rgba(201,168,76,0.4)', border: '1.5px solid var(--gold)' }} />
-                      <span>[gold]word[/gold] — Key phrase</span>
-                    </div>
-                    <div className="hl-guide-item">
-                      <div className="hl-guide-dot" style={{ background: 'rgba(239,68,68,0.3)', border: '1.5px solid var(--danger)' }} />
-                      <span>[red]word[/red] — Common error</span>
-                    </div>
+                  <div style={{
+                    background: '#f8fafb', border: '1px solid #e5e7eb', borderRadius: '8px',
+                    padding: '0.7rem 1rem', marginBottom: '0.8rem', fontSize: '0.82rem',
+                    color: '#6b7280', lineHeight: 1.5,
+                  }}>
+                    <strong style={{ color: '#1a1a2e' }}>🚦 How to highlight:</strong> Select a word with your mouse, then click a color button. Click the same color again to remove it.
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyColor('teal')} style={{
+                      background: '#1a7a7a', color: '#fff', border: 'none',
+                      padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer',
+                      fontSize: '0.82rem', fontWeight: 600,
+                    }}>🟢 Go (practice this)</button>
+                    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyColor('gold')} style={{
+                      background: '#c9a84c', color: '#fff', border: 'none',
+                      padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer',
+                      fontSize: '0.82rem', fontWeight: 600,
+                    }}>🟡 Caution (watch this)</button>
+                    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyColor('red')} style={{
+                      background: '#ef4444', color: '#fff', border: 'none',
+                      padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer',
+                      fontSize: '0.82rem', fontWeight: 600,
+                    }}>🔴 Stop (common error)</button>
+                    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyColor('purple')} style={{
+                      background: '#7F77DD', color: '#fff', border: 'none',
+                      padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer',
+                      fontSize: '0.82rem', fontWeight: 600,
+                    }}>💜 Open Up (open mouth)</button>
                   </div>
                   <div className="form-section">
-                    <label className="form-label">Sentences (one per line, use markup above)</label>
-                    <textarea
-                      className="form-textarea"
-                      value={sentences}
-                      onChange={e => setSentences(e.target.value)}
-                      placeholder={`[teal]There's[/teal] a moment every [gold]immigration lawyer[/gold] knows...\nYou need to say [teal]the[/teal] word "[teal]threshold[/teal]" clearly.\n...`}
-                      rows={8}
+                    <label className="form-label">Sentences (one per line)</label>
+                    <div
+                      ref={editorRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      style={{
+                        width: '100%', minHeight: '200px', padding: '0.9rem 1rem',
+                        border: '2px solid #1a7a7a', borderRadius: '8px',
+                        fontSize: '1.05rem', fontFamily: 'Cormorant Garamond, serif',
+                        lineHeight: 1.8, color: '#1a1a2e', background: '#fff',
+                        outline: 'none', whiteSpace: 'pre-wrap',
+                      }}
                     />
                   </div>
                   <div className="form-section">

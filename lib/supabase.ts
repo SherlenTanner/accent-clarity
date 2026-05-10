@@ -26,10 +26,8 @@ export interface Student {
     personalized_lessons: boolean
     record_feedback: boolean
     sound_library: boolean
-    fluency_skills: boolean
-    avatar_shadowing: boolean
-    progress_tracker: boolean
-  }
+    fluency_drills: boolean
+  } | null
   created_at: string
 }
 
@@ -40,7 +38,7 @@ export interface Lesson {
   title: string | null
   lesson_date: string | null
   sentences: string | null
-  focus_sounds: string[]
+  focus_sounds: string[] | null
   teacher_note: string | null
   status: 'locked' | 'active' | 'done'
   video_url: string | null
@@ -66,6 +64,7 @@ export function parseMarkup(text: string): string {
     .replace(/\[teal\](.*?)\[\/teal\]/g, '<span class="hl-teal">$1</span>')
     .replace(/\[gold\](.*?)\[\/gold\]/g, '<span class="hl-gold">$1</span>')
     .replace(/\[red\](.*?)\[\/red\]/g, '<span class="hl-red">$1</span>')
+    .replace(/\[purple\](.*?)\[\/purple\]/g, '<span class="hl-purple">$1</span>')
 }
 
 /** Split sentence markup into individual sentences */

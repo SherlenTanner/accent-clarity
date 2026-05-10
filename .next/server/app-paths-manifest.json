@@ -1,5 +1,6 @@
 {
-  "/admin/page": "app/admin/page.js",
-  "/fluency/page": "app/fluency/page.js",
-  "/dashboard/page": "app/dashboard/page.js"
+  "/dashboard/page": "app/dashboard/page.js",
+  "/lesson/page": "app/lesson/page.js",
+  "/login/page": "app/login/page.js",
+  "/admin/page": "app/admin/page.js"
 }

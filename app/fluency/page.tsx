@@ -1,6 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
+import MicCheck from '@/components/MicCheck'
+import { createClient } from '@/lib/supabase'
 
 // ── TYPES ─────────────────────────────────────────────────────────────
 type VisToken = [string, string?, string?]
@@ -385,8 +387,26 @@ export default function FluencyPage() {
   const [topicId, setTopicId]   = useState('linking')
   const [pracIdx, setPracIdx]   = useState(0)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ linking: true })
+
+  // ── Recording state ──
   const [recWords, setRecWords] = useState(false)
   const [recSents, setRecSents] = useState(false)
+  const [wordsUrl, setWordsUrl] = useState<string | null>(null)
+  const [sentsUrl, setSentsUrl] = useState<string | null>(null)
+  const [wordsSaveStatus, setWordsSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [sentsSaveStatus, setSentsSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+  // ── Mic check popup ──
+  const [showMicCheck, setShowMicCheck] = useState(false)
+  const [pendingRecording, setPendingRecording] = useState<'words' | 'sents' | null>(null)
+
+  // ── Media recorder refs ──
+  const wordsRecorderRef = useRef<MediaRecorder | null>(null)
+  const sentsRecorderRef = useRef<MediaRecorder | null>(null)
+  const wordsChunksRef = useRef<Blob[]>([])
+  const sentsChunksRef = useRef<Blob[]>([])
+
+  const supabase = createClient()
 
   const topic    = TOPICS.find(t => t.id === topicId)!
   const practice = topic.practices[pracIdx]
@@ -400,6 +420,10 @@ export default function FluencyPage() {
     setOpenGroups({ [tid]: true })
     setRecWords(false)
     setRecSents(false)
+    setWordsUrl(null)
+    setSentsUrl(null)
+    setWordsSaveStatus('idle')
+    setSentsSaveStatus('idle')
   }
 
   function toggleGroup(tid: string) {
@@ -416,10 +440,181 @@ export default function FluencyPage() {
     if (topicIdx < TOPICS.length - 1) goTo(TOPICS[topicIdx + 1].id, 0)
   }
 
+  // ── Recording logic ──
+  function hasPassedMicCheck(): boolean {
+    try {
+      return localStorage.getItem('accentClarity_micCheckPassed') === 'true'
+    } catch { return false }
+  }
+
+  async function handleWordsClick() {
+    if (recWords) {
+      stopWordsRecording()
+      return
+    }
+    if (!hasPassedMicCheck()) {
+      setPendingRecording('words')
+      setShowMicCheck(true)
+      return
+    }
+    await startWordsRecording()
+  }
+
+  async function handleSentsClick() {
+    if (recSents) {
+      stopSentsRecording()
+      return
+    }
+    if (!hasPassedMicCheck()) {
+      setPendingRecording('sents')
+      setShowMicCheck(true)
+      return
+    }
+    await startSentsRecording()
+  }
+
+  // ── Upload logic ──
+  async function uploadRecording(
+    blob: Blob,
+    kind: 'words' | 'sents',
+    setStatus: (s: 'idle' | 'saving' | 'saved' | 'error') => void
+  ) {
+    setStatus('saving')
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setStatus('error')
+        return
+      }
+
+      const timestamp = Date.now()
+      const filename = `${user.id}/fluency-${topicId}-${pracIdx}-${kind}-${timestamp}.webm`
+
+      const { error: uploadErr } = await supabase.storage
+        .from('recordings')
+        .upload(filename, blob, { contentType: 'audio/webm' })
+
+      if (uploadErr) {
+        console.error('Upload error:', uploadErr)
+        setStatus('error')
+        return
+      }
+
+      const context = `${topic.name} › ${practice.name} › ${kind === 'words' ? 'Words' : 'Sentences'}`
+      const { error: dbErr } = await supabase.from('recordings').insert({
+        student_id: user.id,
+        page: 'fluency',
+        context: context,
+        storage_path: filename,
+      })
+
+      if (dbErr) {
+        console.error('DB error:', dbErr)
+        setStatus('error')
+        return
+      }
+
+      setStatus('saved')
+    } catch (err) {
+      console.error('Save error:', err)
+      setStatus('error')
+    }
+  }
+
+  async function startWordsRecording() {
+    try {
+      setWordsUrl(null)
+      setWordsSaveStatus('idle')
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      wordsRecorderRef.current = recorder
+      wordsChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) wordsChunksRef.current.push(e.data)
+      }
+      recorder.onstop = () => {
+        const blob = new Blob(wordsChunksRef.current, { type: 'audio/webm' })
+        setWordsUrl(URL.createObjectURL(blob))
+        stream.getTracks().forEach(t => t.stop())
+        uploadRecording(blob, 'words', setWordsSaveStatus)
+      }
+      recorder.start()
+      setRecWords(true)
+    } catch (err) {
+      alert('Could not access microphone. Please check your browser permissions.')
+      setRecWords(false)
+    }
+  }
+
+  function stopWordsRecording() {
+    if (wordsRecorderRef.current && wordsRecorderRef.current.state === 'recording') {
+      wordsRecorderRef.current.stop()
+    }
+    setRecWords(false)
+  }
+
+  async function startSentsRecording() {
+    try {
+      setSentsUrl(null)
+      setSentsSaveStatus('idle')
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      sentsRecorderRef.current = recorder
+      sentsChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) sentsChunksRef.current.push(e.data)
+      }
+      recorder.onstop = () => {
+        const blob = new Blob(sentsChunksRef.current, { type: 'audio/webm' })
+        setSentsUrl(URL.createObjectURL(blob))
+        stream.getTracks().forEach(t => t.stop())
+        uploadRecording(blob, 'sents', setSentsSaveStatus)
+      }
+      recorder.start()
+      setRecSents(true)
+    } catch (err) {
+      alert('Could not access microphone. Please check your browser permissions.')
+      setRecSents(false)
+    }
+  }
+
+  function stopSentsRecording() {
+    if (sentsRecorderRef.current && sentsRecorderRef.current.state === 'recording') {
+      sentsRecorderRef.current.stop()
+    }
+    setRecSents(false)
+  }
+
+  async function handleMicCheckPass() {
+    setShowMicCheck(false)
+    if (pendingRecording === 'words') await startWordsRecording()
+    if (pendingRecording === 'sents') await startSentsRecording()
+    setPendingRecording(null)
+  }
+
+  function handleMicCheckCancel() {
+    setShowMicCheck(false)
+    setPendingRecording(null)
+  }
+
+  // Save status label helper
+  function saveStatusLabel(status: 'idle' | 'saving' | 'saved' | 'error') {
+    if (status === 'saving') return { text: '⏳ Saving...', color: '#8aada5' }
+    if (status === 'saved') return { text: '✓ Saved to your library', color: '#0F6E56' }
+    if (status === 'error') return { text: '⚠️ Could not save — try again', color: '#c0392b' }
+    return null
+  }
+
   const teal = '#1D9E75'
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+
+      {showMicCheck && (
+        <MicCheck onPass={handleMicCheckPass} onCancel={handleMicCheckCancel} />
+      )}
 
       {/* Fluency topic panel */}
       <aside style={{ width: 256, background: '#f6f9f8', borderRight: '1px solid #e0eeea', display: 'flex', flexDirection: 'column', overflowY: 'auto', flexShrink: 0 }}>
@@ -585,11 +780,24 @@ export default function FluencyPage() {
             </div>
             <div style={{ padding: '16px 22px', borderTop: '1px solid #dceee9', background: 'white' }}>
               <button
-                onClick={() => setRecWords(!recWords)}
+                onClick={handleWordsClick}
                 style={{ width: '100%', padding: 15, background: recWords ? '#c0392b' : teal, color: 'white', border: 'none', borderRadius: 9, fontSize: 14.5, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
               >
                 🎙️ {recWords ? 'Stop Recording — Words' : 'Start Recording — Words'}
               </button>
+              {wordsUrl && (
+                <div style={{ marginTop: 14, padding: 14, background: '#f0f9f9', border: '1px solid #dceee9', borderRadius: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: '#0F6E56', margin: 0 }}>▶️ Your recording</p>
+                    {saveStatusLabel(wordsSaveStatus) && (
+                      <span style={{ fontSize: 11, fontWeight: 500, color: saveStatusLabel(wordsSaveStatus)!.color }}>
+                        {saveStatusLabel(wordsSaveStatus)!.text}
+                      </span>
+                    )}
+                  </div>
+                  <audio controls src={wordsUrl} style={{ width: '100%' }} />
+                </div>
+              )}
             </div>
           </div>
 
@@ -609,11 +817,24 @@ export default function FluencyPage() {
             </div>
             <div style={{ padding: '16px 22px', borderTop: '1px solid #dceee9', background: 'white' }}>
               <button
-                onClick={() => setRecSents(!recSents)}
+                onClick={handleSentsClick}
                 style={{ width: '100%', padding: 15, background: recSents ? '#c0392b' : teal, color: 'white', border: 'none', borderRadius: 9, fontSize: 14.5, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
               >
                 🎙️ {recSents ? 'Stop Recording — Sentences' : 'Start Recording — Sentences'}
               </button>
+              {sentsUrl && (
+                <div style={{ marginTop: 14, padding: 14, background: '#f0f9f9', border: '1px solid #dceee9', borderRadius: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: '#0F6E56', margin: 0 }}>▶️ Your recording</p>
+                    {saveStatusLabel(sentsSaveStatus) && (
+                      <span style={{ fontSize: 11, fontWeight: 500, color: saveStatusLabel(sentsSaveStatus)!.color }}>
+                        {saveStatusLabel(sentsSaveStatus)!.text}
+                      </span>
+                    )}
+                  </div>
+                  <audio controls src={sentsUrl} style={{ width: '100%' }} />
+                </div>
+              )}
             </div>
           </div>
 
