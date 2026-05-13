@@ -3,44 +3,58 @@ import { createClient } from '@/lib/supabase-server'
 import LessonClient from './LessonClient'
 import type { Student, Lesson } from '@/lib/supabase'
 
-export default async function LessonPage() {
+export default async function LessonPage({
+  searchParams,
+}: {
+  searchParams: { n?: string }
+}) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Find the logged-in person's record
-  const { data: me } = await supabase
-    .from('students')
-    .select('*')
-    .eq('user_id', user.id)
-    .single() as { data: Student | null }
+  // Find student record (by user_id, falling back to email)
+  const byId = await supabase
+    .from('students').select('*').eq('user_id', user.id).maybeSingle()
+  const byEmail = !byId.data && user.email
+    ? await supabase.from('students').select('*').eq('email', user.email).maybeSingle()
+    : { data: null }
+  let student = (byId.data ?? byEmail.data) as Student | null
 
-  if (!me) redirect('/dashboard')
-
-  // If admin is viewing, load the first student's active lesson (Marcos for now).
-  // If a student is viewing, load their own active lesson.
-  let studentForLesson: Student = me
-
-  if (me.role === 'admin') {
-    const { data: firstStudent } = await supabase
-      .from('students')
-      .select('*')
-      .eq('role', 'student')
-      .order('name')
-      .limit(1)
-      .single() as { data: Student | null }
-
-    if (firstStudent) {
-      studentForLesson = firstStudent
-    }
+  // Backfill user_id if missing
+  if (student && !student.user_id) {
+    await supabase.from('students').update({ user_id: user.id }).eq('id', student.id)
+    student = { ...student, user_id: user.id }
   }
 
-  const { data: lesson } = await supabase
-    .from('lessons')
-    .select('*')
-    .eq('student_id', studentForLesson.id)
-    .eq('status', 'active')
-    .single() as { data: Lesson | null }
+  if (!student) {
+    return <div style={{ padding: '2rem' }}>Profile not found. Please contact Sherlen.</div>
+  }
 
-  return <LessonClient student={studentForLesson} lesson={lesson} />
+  // Decide which lesson to load:
+  // - If URL has ?n=X, load that specific lesson number
+  // - Otherwise, load the student's active lesson
+  const requestedNum = searchParams?.n ? parseInt(searchParams.n, 10) : null
+  const useRequested = requestedNum !== null && !isNaN(requestedNum) && requestedNum > 0
+
+  let lesson: Lesson | null = null
+
+  if (useRequested) {
+    const { data } = await supabase
+      .from('lessons')
+      .select('*')
+      .eq('student_id', student.id)
+      .eq('lesson_number', requestedNum)
+      .maybeSingle() as { data: Lesson | null }
+    lesson = data
+  } else {
+    const { data } = await supabase
+      .from('lessons')
+      .select('*')
+      .eq('student_id', student.id)
+      .eq('status', 'active')
+      .maybeSingle() as { data: Lesson | null }
+    lesson = data
+  }
+
+  return <LessonClient student={student} lesson={lesson} />
 }

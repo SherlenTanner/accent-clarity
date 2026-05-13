@@ -106,11 +106,11 @@ export default async function DashboardPage() {
   const pcBarTrack: CSSProperties = { height: 10, background: T.border, borderRadius: 10, overflow: 'hidden' }
   const pcBarFill: CSSProperties = { height: '100%', borderRadius: 10, background: `linear-gradient(90deg, ${T.teal}, ${T.tealMid})`, width: `${progressPct}%` }
   const pcDots: CSSProperties = { display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }
-  const dotBase: CSSProperties = { width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 700, flexShrink: 0 }
+  const dotBase: CSSProperties = { width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 700, flexShrink: 0, textDecoration: 'none' }
   const dotStyle = (state: string): CSSProperties => {
-    if (state === 'done') return { ...dotBase, background: T.success, color: 'white' }
-    if (state === 'current') return { ...dotBase, background: T.teal, color: 'white', border: `3px solid ${T.gold}`, boxShadow: '0 0 0 4px rgba(201,168,76,0.15)', width: 38, height: 38, fontSize: '0.7rem' }
-    return { ...dotBase, background: T.border, color: T.muted }
+    if (state === 'done') return { ...dotBase, background: T.success, color: 'white', cursor: 'pointer' }
+    if (state === 'current') return { ...dotBase, background: T.teal, color: 'white', border: `3px solid ${T.gold}`, boxShadow: '0 0 0 4px rgba(201,168,76,0.15)', width: 38, height: 38, fontSize: '0.7rem', cursor: 'pointer' }
+    return { ...dotBase, background: T.border, color: T.muted, cursor: 'default' }
   }
 
   // Bottom grid
@@ -214,7 +214,18 @@ export default async function DashboardPage() {
 
           <div style={pcDots}>
             {dots.map(d => (
-              <div key={d.n} style={dotStyle(d.state)} title={`Lesson ${d.n}`}>{d.n}</div>
+              d.state === 'locked' ? (
+                <div key={d.n} style={dotStyle(d.state)} title={`Lesson ${d.n} — locked`}>{d.n}</div>
+              ) : (
+                <Link
+                  key={d.n}
+                  href={`/lesson?n=${d.n}`}
+                  style={dotStyle(d.state)}
+                  title={`Open Lesson ${d.n}`}
+                >
+                  {d.n}
+                </Link>
+              )
             ))}
           </div>
         </div>
