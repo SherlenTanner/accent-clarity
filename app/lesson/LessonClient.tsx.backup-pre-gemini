@@ -11,7 +11,6 @@ interface Props {
 
 type ColorTag = 'teal' | 'gold' | 'red' | 'purple'
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
-type FeedbackStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 function markupToHtml(text: string): string {
   if (!text) return ''
@@ -55,14 +54,11 @@ export default function LessonClient({ student, lesson }: Props) {
   const [feedbackSaved, setFeedbackSaved] = useState(false)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null)
-  const [aiFeedback, setAiFeedback] = useState<string>('')
-  const [aiStatus, setAiStatus] = useState<FeedbackStatus>('idle')
   const editorRef = useRef<HTMLDivElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const lastRecordingIdRef = useRef<string | null>(null)
   const isAdmin = student.role === 'admin'
   const sentences = lesson?.sentences ? splitSentences(lesson.sentences) : []
 
@@ -137,17 +133,22 @@ export default function LessonClient({ student, lesson }: Props) {
   }
 
   const handleSave = async () => {
+    console.log('[Save] Save button clicked')
     if (!lesson) {
+      console.log('[Save] No lesson — aborting')
       alert('No lesson found to save to.')
       return
     }
     if (!editorRef.current) {
+      console.log('[Save] Editor ref not ready — aborting')
       alert('Editor not ready. Please try again.')
       return
     }
     setSaving(true)
     const html = editorRef.current.innerHTML
+    console.log('[Save] Editor HTML:', html)
     const markup = htmlToMarkup(html)
+    console.log('[Save] Markup to save:', markup)
     try {
       const supabase = createClient()
       const { error } = await supabase
@@ -156,13 +157,16 @@ export default function LessonClient({ student, lesson }: Props) {
         .eq('id', lesson.id)
       setSaving(false)
       if (error) {
+        console.error('[Save] Supabase error:', error)
         alert('Save failed: ' + error.message)
       } else {
+        console.log('[Save] Saved successfully!')
         setEditorOpen(false)
         window.location.reload()
       }
     } catch (err: any) {
       setSaving(false)
+      console.error('[Save] Exception:', err)
       alert('Save threw an error: ' + (err?.message || String(err)))
     }
   }
@@ -212,6 +216,7 @@ export default function LessonClient({ student, lesson }: Props) {
     }
   }
 
+  // ─── REAL MICROPHONE RECORDING ───
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -229,7 +234,6 @@ export default function LessonClient({ student, lesson }: Props) {
         setRecordedUrl(url)
         stream.getTracks().forEach(t => t.stop())
         uploadRecording(blob)
-        getGeminiFeedback(blob)
       }
 
       recorder.start()
@@ -238,12 +242,9 @@ export default function LessonClient({ student, lesson }: Props) {
       setTimer(0)
       setSaveStatus('idle')
       setRecordedUrl(null)
-      setAiFeedback('')
-      setAiStatus('idle')
-      lastRecordingIdRef.current = null
     } catch (err: any) {
       console.error('Mic error:', err)
-      alert('Could not access microphone.\n\n' + (err?.message || String(err)) + '\n\nMake sure you allowed microphone permissions in your browser.')
+      alert('Could not access microphone.\n\n' + (err?.message || String(err)) + '\n\nMake sure you allowed microphone permissions in your browser. On Chrome: click the lock icon in the address bar → Site settings → Microphone → Allow.')
     }
   }
 
@@ -257,6 +258,7 @@ export default function LessonClient({ student, lesson }: Props) {
 
   const uploadRecording = async (blob: Blob) => {
     if (!lesson) {
+      console.error('[Recording] No lesson context')
       setSaveStatus('error')
       return
     }
@@ -265,6 +267,7 @@ export default function LessonClient({ student, lesson }: Props) {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
+        console.error('[Recording] No user')
         setSaveStatus('error')
         return
       }
@@ -283,17 +286,12 @@ export default function LessonClient({ student, lesson }: Props) {
       }
 
       const context = `Lesson ${lesson.lesson_number ?? '?'} — ${lesson.title || 'Untitled'}`
-      const { data: inserted, error: dbErr } = await supabase
-        .from('recordings')
-        .insert({
-          student_id: user.id,
-          page: 'lesson',
-          context: context,
-          storage_path: filename,
-          ai_feedback: null,
-        })
-        .select('id')
-        .single()
+      const { error: dbErr } = await supabase.from('recordings').insert({
+        student_id: user.id,
+        page: 'lesson',
+        context: context,
+        storage_path: filename,
+      })
 
       if (dbErr) {
         console.error('[Recording] DB error:', dbErr)
@@ -301,65 +299,11 @@ export default function LessonClient({ student, lesson }: Props) {
         return
       }
 
-      // Remember which row we just created so we can update it with AI feedback
-      if (inserted?.id) {
-        lastRecordingIdRef.current = inserted.id
-      }
-
+      console.log('[Recording] Saved successfully:', filename)
       setSaveStatus('saved')
     } catch (err) {
       console.error('[Recording] Save error:', err)
       setSaveStatus('error')
-    }
-  }
-
-  const getGeminiFeedback = async (blob: Blob) => {
-    setAiStatus('loading')
-    setAiFeedback('')
-    try {
-      const formData = new FormData()
-      formData.append('audio', blob, 'recording.webm')
-      formData.append('sentences', lesson?.sentences || '')
-      formData.append('studentName', student.name || 'the student')
-
-      const res = await fetch('/api/gemini-feedback', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!res.ok) {
-        setAiStatus('error')
-        return
-      }
-
-      const data = await res.json()
-      if (data?.feedback) {
-        setAiFeedback(data.feedback)
-        setAiStatus('ready')
-
-        // Save AI feedback to the recording row we just created
-        const rowId = lastRecordingIdRef.current
-        if (rowId) {
-          try {
-            const supabase = createClient()
-            const { error: updateErr } = await supabase
-              .from('recordings')
-              .update({ ai_feedback: data.feedback })
-              .eq('id', rowId)
-            if (updateErr) {
-              console.error('[Gemini] Failed to save feedback to DB:', updateErr)
-            } else {
-              console.log('[Gemini] Feedback saved to row:', rowId)
-            }
-          } catch (saveErr) {
-            console.error('[Gemini] Save exception:', saveErr)
-          }
-        }
-      } else {
-        setAiStatus('error')
-      }
-    } catch (err) {
-      setAiStatus('error')
     }
   }
 
@@ -368,9 +312,6 @@ export default function LessonClient({ student, lesson }: Props) {
     setRecording(false)
     setTimer(0)
     setSaveStatus('idle')
-    setAiStatus('idle')
-    setAiFeedback('')
-    lastRecordingIdRef.current = null
     if (recordedUrl) URL.revokeObjectURL(recordedUrl)
     setRecordedUrl(null)
   }
@@ -381,7 +322,7 @@ export default function LessonClient({ student, lesson }: Props) {
       <main style={{ flex: 1, marginLeft: '80px', padding: '2rem 2.5rem', fontFamily: 'DM Sans, sans-serif' }}>
 
         <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
-          LangSolution &rsaquo; Accent Clarity &rsaquo; Legal Track &rsaquo; My Personalized Lesson
+          LangSolution › Accent Clarity › Legal Track › My Personalized Lesson
         </div>
 
         <div style={{ marginBottom: '1.5rem' }}>
@@ -775,7 +716,7 @@ export default function LessonClient({ student, lesson }: Props) {
                     fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
                   }}>
-                    ⏹ Stop &amp; Get AI Feedback
+                    ⏹ Stop &amp; Save Recording
                   </button>
                 )}
 
@@ -797,103 +738,32 @@ export default function LessonClient({ student, lesson }: Props) {
                         {saveStatus === 'idle' && 'Ready'}
                       </div>
                     </div>
-                    <div style={{ padding: '1.5rem' }}>
+                    <div style={{ padding: '1.5rem', textAlign: 'center' }}>
                       {recordedUrl && (
                         <audio controls src={recordedUrl} style={{ width: '100%', marginBottom: '1rem' }} />
                       )}
-
-                      <div style={{
-                        background: '#fff',
-                        border: '1px solid rgba(26,122,122,0.2)',
-                        borderRadius: '10px',
-                        padding: '1rem 1.1rem',
-                        marginBottom: '1rem',
-                      }}>
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem',
-                        }}>
-                          <div style={{
-                            fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em',
-                            textTransform: 'uppercase', color: '#1a7a7a',
-                          }}>
-                            🤖 AI Coach Feedback
-                          </div>
+                      {saveStatus === 'saving' && (
+                        <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1rem' }}>
+                          Uploading your recording to your lesson…
                         </div>
-
-                        {aiStatus === 'loading' && (
-                          <div style={{
-                            display: 'flex', alignItems: 'center', gap: '0.6rem',
-                            fontSize: '0.85rem', color: '#6b7280', fontStyle: 'italic',
-                            padding: '0.5rem 0',
-                          }}>
-                            <div style={{
-                              width: '16px', height: '16px', border: '2px solid #e5e7eb',
-                              borderTop: '2px solid #1a7a7a', borderRadius: '50%',
-                              animation: 'spin 0.8s linear infinite',
-                            }} />
-                            Listening to your recording…
-                          </div>
-                        )}
-
-                        {aiStatus === 'ready' && aiFeedback && (
-                          <div style={{
-                            fontSize: '1.15rem', color: '#1a1a2e', lineHeight: 1.7,
-                            fontFamily: 'Cormorant Garamond, serif',
-                          }}>
-                            {(() => {
-                              // First try splitting on double newlines (preferred)
-                              let paras = aiFeedback.split(/\n\s*\n/).filter(p => p.trim())
-                              // If Gemini ignored the format and sent one block, try to split on common markers
-                              if (paras.length < 2) {
-                                const text = aiFeedback
-                                // Split before "Watch", "Also", "Your linking", "Tonight:", "Practice:"
-                                const split = text.split(/(?=Watch\s|Also,?\s|Your linking|Your rhythm|Your intonation|Tonight:|Practice:|For tonight)/g)
-                                paras = split.filter(p => p.trim())
-                              }
-                              return paras.map((para, idx) => (
-                                <p
-                                  key={idx}
-                                  style={{ margin: '0 0 1.1rem 0' }}
-                                  dangerouslySetInnerHTML={{
-                                    __html: para
-                                      .replace(/\[red\](.*?)\[\/red\]/g, '<span style="color:#ef4444;font-weight:600;">$1</span>')
-                                      .replace(/\[teal\](.*?)\[\/teal\]/g, '<span style="color:#1a7a7a;font-weight:600;">$1</span>')
-                                      .replace(/\[gold\](.*?)\[\/gold\]/g, '<span style="color:#c9a84c;font-weight:600;">$1</span>')
-                                      .replace(/\[purple\](.*?)\[\/purple\]/g, '<span style="color:#7F77DD;font-weight:600;">$1</span>'),
-                                  }}
-                                />
-                              ))
-                            })()}
-                          </div>
-                        )}
-
-                        {aiStatus === 'error' && (
-                          <div style={{
-                            fontSize: '0.85rem', color: '#ef4444',
-                            padding: '0.5rem 0',
-                          }}>
-                            Couldn't get AI feedback this time. Your recording was still saved — Sherlen will review it.
-                          </div>
-                        )}
-
-                        {aiStatus === 'idle' && (
-                          <div style={{
-                            fontSize: '0.85rem', color: '#888', fontStyle: 'italic',
-                          }}>
-                            Waiting for recording…
-                          </div>
-                        )}
-                      </div>
-
-                      <div style={{ textAlign: 'center' }}>
-                        <button type="button" onClick={resetRecording} style={{
-                          padding: '0.75rem 1.5rem', background: '#fff', color: '#1a7a7a',
-                          border: '1px solid #1a7a7a', borderRadius: '10px',
-                          fontFamily: 'DM Sans, sans-serif', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
-                        }}>
-                          🔄 Record Again
-                        </button>
-                      </div>
+                      )}
+                      {saveStatus === 'saved' && (
+                        <div style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 600, marginBottom: '1rem' }}>
+                          Recording saved! Sherlen will review this before your next session.
+                        </div>
+                      )}
+                      {saveStatus === 'error' && (
+                        <div style={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 600, marginBottom: '1rem' }}>
+                          Something went wrong saving the recording. Try again.
+                        </div>
+                      )}
+                      <button type="button" onClick={resetRecording} style={{
+                        padding: '0.75rem 1.5rem', background: '#fff', color: '#1a7a7a',
+                        border: '1px solid #1a7a7a', borderRadius: '10px',
+                        fontFamily: 'DM Sans, sans-serif', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
+                      }}>
+                        🔄 Record Again
+                      </button>
                     </div>
                   </div>
                 )}
@@ -981,7 +851,6 @@ export default function LessonClient({ student, lesson }: Props) {
           @keyframes mouthTalk { from { height: 4px; } to { height: 14px; } }
           @keyframes avWave { from { transform: scaleY(0.3); } to { transform: scaleY(1); } }
           @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
-          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         `}</style>
 
       </main>

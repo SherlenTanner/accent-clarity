@@ -62,7 +62,6 @@ export default function LessonClient({ student, lesson }: Props) {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const lastRecordingIdRef = useRef<string | null>(null)
   const isAdmin = student.role === 'admin'
   const sentences = lesson?.sentences ? splitSentences(lesson.sentences) : []
 
@@ -240,7 +239,6 @@ export default function LessonClient({ student, lesson }: Props) {
       setRecordedUrl(null)
       setAiFeedback('')
       setAiStatus('idle')
-      lastRecordingIdRef.current = null
     } catch (err: any) {
       console.error('Mic error:', err)
       alert('Could not access microphone.\n\n' + (err?.message || String(err)) + '\n\nMake sure you allowed microphone permissions in your browser.')
@@ -277,38 +275,25 @@ export default function LessonClient({ student, lesson }: Props) {
         .upload(filename, blob, { contentType: 'audio/webm' })
 
       if (uploadErr) {
-        console.error('[Recording] Upload error:', uploadErr)
         setSaveStatus('error')
         return
       }
 
       const context = `Lesson ${lesson.lesson_number ?? '?'} — ${lesson.title || 'Untitled'}`
-      const { data: inserted, error: dbErr } = await supabase
-        .from('recordings')
-        .insert({
-          student_id: user.id,
-          page: 'lesson',
-          context: context,
-          storage_path: filename,
-          ai_feedback: null,
-        })
-        .select('id')
-        .single()
+      const { error: dbErr } = await supabase.from('recordings').insert({
+        student_id: user.id,
+        page: 'lesson',
+        context: context,
+        storage_path: filename, ai_feedback: null,
+      })
 
       if (dbErr) {
-        console.error('[Recording] DB error:', dbErr)
         setSaveStatus('error')
         return
       }
 
-      // Remember which row we just created so we can update it with AI feedback
-      if (inserted?.id) {
-        lastRecordingIdRef.current = inserted.id
-      }
-
       setSaveStatus('saved')
     } catch (err) {
-      console.error('[Recording] Save error:', err)
       setSaveStatus('error')
     }
   }
@@ -336,25 +321,6 @@ export default function LessonClient({ student, lesson }: Props) {
       if (data?.feedback) {
         setAiFeedback(data.feedback)
         setAiStatus('ready')
-
-        // Save AI feedback to the recording row we just created
-        const rowId = lastRecordingIdRef.current
-        if (rowId) {
-          try {
-            const supabase = createClient()
-            const { error: updateErr } = await supabase
-              .from('recordings')
-              .update({ ai_feedback: data.feedback })
-              .eq('id', rowId)
-            if (updateErr) {
-              console.error('[Gemini] Failed to save feedback to DB:', updateErr)
-            } else {
-              console.log('[Gemini] Feedback saved to row:', rowId)
-            }
-          } catch (saveErr) {
-            console.error('[Gemini] Save exception:', saveErr)
-          }
-        }
       } else {
         setAiStatus('error')
       }
@@ -370,7 +336,6 @@ export default function LessonClient({ student, lesson }: Props) {
     setSaveStatus('idle')
     setAiStatus('idle')
     setAiFeedback('')
-    lastRecordingIdRef.current = null
     if (recordedUrl) URL.revokeObjectURL(recordedUrl)
     setRecordedUrl(null)
   }
@@ -381,7 +346,7 @@ export default function LessonClient({ student, lesson }: Props) {
       <main style={{ flex: 1, marginLeft: '80px', padding: '2rem 2.5rem', fontFamily: 'DM Sans, sans-serif' }}>
 
         <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
-          LangSolution &rsaquo; Accent Clarity &rsaquo; Legal Track &rsaquo; My Personalized Lesson
+          LangSolution › Accent Clarity › Legal Track › My Personalized Lesson
         </div>
 
         <div style={{ marginBottom: '1.5rem' }}>
@@ -837,33 +802,10 @@ export default function LessonClient({ student, lesson }: Props) {
 
                         {aiStatus === 'ready' && aiFeedback && (
                           <div style={{
-                            fontSize: '1.15rem', color: '#1a1a2e', lineHeight: 1.7,
+                            fontSize: '0.95rem', color: '#1a1a2e', lineHeight: 1.6,
                             fontFamily: 'Cormorant Garamond, serif',
                           }}>
-                            {(() => {
-                              // First try splitting on double newlines (preferred)
-                              let paras = aiFeedback.split(/\n\s*\n/).filter(p => p.trim())
-                              // If Gemini ignored the format and sent one block, try to split on common markers
-                              if (paras.length < 2) {
-                                const text = aiFeedback
-                                // Split before "Watch", "Also", "Your linking", "Tonight:", "Practice:"
-                                const split = text.split(/(?=Watch\s|Also,?\s|Your linking|Your rhythm|Your intonation|Tonight:|Practice:|For tonight)/g)
-                                paras = split.filter(p => p.trim())
-                              }
-                              return paras.map((para, idx) => (
-                                <p
-                                  key={idx}
-                                  style={{ margin: '0 0 1.1rem 0' }}
-                                  dangerouslySetInnerHTML={{
-                                    __html: para
-                                      .replace(/\[red\](.*?)\[\/red\]/g, '<span style="color:#ef4444;font-weight:600;">$1</span>')
-                                      .replace(/\[teal\](.*?)\[\/teal\]/g, '<span style="color:#1a7a7a;font-weight:600;">$1</span>')
-                                      .replace(/\[gold\](.*?)\[\/gold\]/g, '<span style="color:#c9a84c;font-weight:600;">$1</span>')
-                                      .replace(/\[purple\](.*?)\[\/purple\]/g, '<span style="color:#7F77DD;font-weight:600;">$1</span>'),
-                                  }}
-                                />
-                              ))
-                            })()}
+                            {aiFeedback}
                           </div>
                         )}
 
